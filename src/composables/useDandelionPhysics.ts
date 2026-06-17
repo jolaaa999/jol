@@ -60,6 +60,12 @@ interface FluffSeed {
 /** 全局光源 — 屏幕左上角 */
 const SUN = { x: -0.78, y: -0.62, intensity: 1.15 }
 
+const STEM_NODES = 8
+const SEED_COUNT = 280
+const TRAIL_MAX = 28
+const MAX_DPR = 2
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+
 // ─── 风力计算 ─────────────────────────────────────────────────────────────────
 
 function computeMouseWind(
@@ -141,6 +147,7 @@ function drawFluffSeed(
   vy: number,
   bristles: PappusBristle[],
   distFromCenter: number,
+  headSpread: number,
   alpha: number,
   angleJitter: number,
   warmup: number,
@@ -149,77 +156,33 @@ function drawFluffSeed(
 ): void {
   const speed = Math.sqrt(vx * vx + vy * vy)
   const motionAngle = speed > 0.03 ? Math.atan2(vy, vx) : 0
-  const layerScale = [0.82, 1.0, 1.18][layer] ?? 1
-  const spread = (1.12 + Math.min(speed * 0.12, 0.95) + warmup * 0.42) * layerScale
-  const edgeFade = 0.22 + (1 - Math.min(distFromCenter / 44, 1)) * 0.78
-  const layerAlpha = [0.72, 0.88, 1.0][layer] ?? 0.85
-  const tremorFreq = [0.007, 0.011, 0.016][layer] ?? 0.01
-  const tremorAmp = [0.06, 0.1, 0.16][layer] ?? 0.08
-  const tremor = Math.sin(time * tremorFreq + distFromCenter * 0.18) * (warmup + 0.08) * tremorAmp
+  const edgeFade = 0.35 + (1 - Math.min(distFromCenter / headSpread, 1)) * 0.65
+  const layerAlpha = [0.68, 0.84, 1.0][layer] ?? 0.85
+  const twinkle = 0.72 + Math.sin(time * 0.005 + distFromCenter * 0.22 + x * 0.01) * 0.28
+  const starAlpha = alpha * edgeFade * layerAlpha * twinkle
+  const rayStretch = 1 + warmup * 0.85 + Math.min(speed * 0.18, 0.55)
 
   ctx.save()
-  ctx.globalAlpha = alpha * edgeFade * layerAlpha
+  ctx.globalAlpha = starAlpha
+  ctx.lineCap = 'round'
 
-  const haloR = (2.8 + layer * 1.4 + edgeFade * 2.2 + warmup * 3.5) * layerScale
-  const halo = ctx.createRadialGradient(x, y, 0, x, y, haloR)
-  halo.addColorStop(0, `rgba(255, 252, 248, ${0.55 + warmup * 0.25})`)
-  halo.addColorStop(0.35, `rgba(255, 255, 255, ${0.28 + edgeFade * 0.18})`)
-  halo.addColorStop(1, 'rgba(255, 255, 255, 0)')
-  ctx.fillStyle = halo
-  ctx.beginPath()
-  ctx.arc(x, y, haloR, 0, Math.PI * 2)
-  ctx.fill()
+  for (const bristle of bristles) {
+    const jitter = angleJitter * 0.08 + Math.sin(time * 0.003 + bristle.angle * 2.3) * 0.04
+    const angle = bristle.angle + motionAngle * (0.08 + warmup * 0.12) + jitter
+    const len = bristle.length * rayStretch
+    const lit = 0.5 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.28
 
-  const sorted = [...bristles].sort((a, b) => b.tier - a.tier)
-  const tierStyle = [
-    { alpha: 0.42, blur: 2, widthBoost: 0.15, curl: 0.08 },
-    { alpha: 0.62, blur: 5, widthBoost: 0.35, curl: 0.12 },
-    { alpha: 0.78, blur: 9, widthBoost: 0.55, curl: 0.18 },
-  ] as const
-
-  for (const bristle of sorted) {
-    const style = tierStyle[bristle.tier] ?? tierStyle[1]
-    const jitter = angleJitter + Math.sin(distFromCenter * 0.12 + bristle.angle * 1.7) * 0.14 + tremor * 0.4
-    const angle = bristle.angle + motionAngle * (0.14 + warmup * 0.2 + bristle.tier * 0.04) + jitter * 0.12
-    const len = bristle.length * (1 + Math.sin(angle * 1.7 + speed * 0.05) * 0.04) * spread
-    const curl = style.curl * len * (0.6 + Math.sin(time * 0.003 + bristle.angle * 2.1) * 0.4)
-    const perpX = -Math.sin(angle)
-    const perpY = Math.cos(angle)
-    const midX = x + Math.cos(angle) * len * 0.55 + perpX * curl
-    const midY = y + Math.sin(angle) * len * 0.55 + perpY * curl
-    const ex = x + Math.cos(angle) * len + perpX * curl * 0.35
-    const ey = y + Math.sin(angle) * len + perpY * curl * 0.35
-    const lit = 0.42 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.32
-
-    ctx.strokeStyle = `rgba(255, 255, 255, ${style.alpha + lit * 0.38})`
-    ctx.lineWidth = bristle.thickness + style.widthBoost + warmup * 0.25
-    ctx.lineCap = 'round'
-    ctx.shadowBlur = style.blur + warmup * 6
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.7)'
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.45 + lit * 0.45})`
+    ctx.lineWidth = bristle.thickness
     ctx.beginPath()
     ctx.moveTo(x, y)
-    ctx.quadraticCurveTo(midX, midY, ex, ey)
+    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len)
     ctx.stroke()
-
-    if (bristle.tier >= 1) {
-      const tipLen = len * (0.12 + bristle.tier * 0.04)
-      const tipSign = Math.sin(bristle.angle * 3.7 + distFromCenter) > 0 ? 1 : -1
-      const tipAngle = angle + tipSign * 0.22
-      ctx.globalAlpha = alpha * edgeFade * layerAlpha * 0.35
-      ctx.lineWidth = Math.max(0.2, bristle.thickness * 0.45)
-      ctx.shadowBlur = 3
-      ctx.beginPath()
-      ctx.moveTo(ex, ey)
-      ctx.lineTo(ex + Math.cos(tipAngle) * tipLen, ey + Math.sin(tipAngle) * tipLen)
-      ctx.stroke()
-      ctx.globalAlpha = alpha * edgeFade * layerAlpha
-    }
   }
 
-  ctx.shadowBlur = 0
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.78 + edgeFade * 0.22})`
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.82 + warmup * 0.18})`
   ctx.beginPath()
-  ctx.arc(x, y, (0.9 + layer * 0.25 + edgeFade * 0.65 + warmup * 0.55) * layerScale, 0, Math.PI * 2)
+  ctx.arc(x, y, 0.35 + layer * 0.08 + warmup * 0.25, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -229,17 +192,27 @@ function drawHead(
   x: number,
   y: number,
   radius: number,
+  headSpread: number,
 ): void {
   ctx.save()
-  const lx = x + SUN.x * radius * 0.6
-  const ly = y + SUN.y * radius * 0.6
-  const g = ctx.createRadialGradient(lx, ly, 0, x, y, radius * 1.4)
-  g.addColorStop(0, 'rgba(255, 255, 255, 0.98)')
-  g.addColorStop(0.45, 'rgba(250, 248, 240, 0.75)')
-  g.addColorStop(1, 'rgba(200, 198, 190, 0.15)')
+  const lx = x + SUN.x * radius * 0.5
+  const ly = y + SUN.y * radius * 0.5
+  const outer = headSpread * 0.55
+  const g = ctx.createRadialGradient(lx, ly, 0, x, y, outer)
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.55)')
+  g.addColorStop(0.2, 'rgba(255, 252, 248, 0.28)')
+  g.addColorStop(0.55, 'rgba(250, 248, 240, 0.1)')
+  g.addColorStop(1, 'rgba(255, 255, 255, 0)')
   ctx.fillStyle = g
-  ctx.shadowBlur = 10
-  ctx.shadowColor = 'rgba(255, 255, 255, 0.45)'
+  ctx.beginPath()
+  ctx.arc(x, y, outer, 0, Math.PI * 2)
+  ctx.fill()
+
+  const core = ctx.createRadialGradient(lx, ly, 0, x, y, radius * 1.2)
+  core.addColorStop(0, 'rgba(255, 255, 255, 0.92)')
+  core.addColorStop(0.5, 'rgba(250, 248, 240, 0.45)')
+  core.addColorStop(1, 'rgba(200, 198, 190, 0.08)')
+  ctx.fillStyle = core
   ctx.beginPath()
   ctx.arc(x, y, radius, 0, Math.PI * 2)
   ctx.fill()
@@ -256,10 +229,6 @@ function drawRoot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 }
 
 // ─── 主 Composable ────────────────────────────────────────────────────────────
-
-const STEM_NODES = 8
-const SEED_COUNT = 96
-const TRAIL_MAX = 56
 
 /** 粉蓝梦幻流线色 — 呼应天空 dawn / mid 色调 */
 function trailColor(tint: number, alpha: number): { r: number; g: number; b: number; a: number } {
@@ -304,6 +273,9 @@ export function useDandelionPhysics(
   let fadeStartTime = 0
   let canvasW = 0
   let canvasH = 0
+  let lastTrailAt = 0
+  let headSpread = 120
+  let coreRadius = 16
 
   // ── 场景初始化 ──
 
@@ -314,10 +286,12 @@ export function useDandelionPhysics(
     engine = new PhysicsEngine({
       gravity: { x: 0, y: 0.06 },
       globalDamping: 0.985,
-      substeps: 5,
+      substeps: 3,
     })
 
     const { cx, groundY, headY } = getLandingLayout(width, height)
+    headSpread = Math.min(width, height) * 0.28
+    coreRadius = headSpread * 0.12
     rootPos = { x: cx, y: groundY }
     headEngineId = STEM_NODES - 1
 
@@ -351,30 +325,25 @@ export function useDandelionPhysics(
     const seedAnchorY = groundY - (STEM_NODES - 1) * segLen
 
     for (let i = 0; i < SEED_COUNT; i++) {
-      const angle = (i / SEED_COUNT) * Math.PI * 2 + Math.random() * 0.15
-      const dist = 8 + Math.random() * 28
+      const t = (i + Math.random() * 0.6) / SEED_COUNT
+      const dist = headSpread * Math.sqrt(t)
+      const angle = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.12
       const ox = Math.cos(angle) * dist
-      const oy = Math.sin(angle) * dist * 0.62
+      const oy = Math.sin(angle) * dist * 0.88
       const sx = cx + ox
       const sy = seedAnchorY + oy
 
       const bristles: PappusBristle[] = []
       const baseAngle = angle + Math.PI
+      const rayCount = 2 + Math.floor(Math.random() * 2)
 
-      for (let tier = 0; tier < 3; tier++) {
-        const tierCount = tier === 0 ? 3 + Math.floor(Math.random() * 3) : tier === 1 ? 4 + Math.floor(Math.random() * 3) : 5 + Math.floor(Math.random() * 4)
-        const tierLenBase = tier === 0 ? 5 : tier === 1 ? 10 : 16
-        const tierLenRange = tier === 0 ? 5 : tier === 1 ? 8 : 12
-        const tierThick = tier === 0 ? 0.28 : tier === 1 ? 0.42 : 0.55
-        for (let b = 0; b < tierCount; b++) {
-          const spread = (b - tierCount / 2) * (tier === 0 ? 0.18 : tier === 1 ? 0.14 : 0.11)
-          bristles.push({
-            angle: baseAngle + spread + (Math.random() - 0.5) * 0.2,
-            length: tierLenBase + Math.random() * tierLenRange + (1 - dist / 36) * (tier + 1) * 3,
-            thickness: tierThick + Math.random() * 0.35,
-            tier,
-          })
-        }
+      for (let b = 0; b < rayCount; b++) {
+        bristles.push({
+          angle: baseAngle + (b - rayCount / 2) * 0.55 + (Math.random() - 0.5) * 0.35,
+          length: 2 + Math.random() * 4.5,
+          thickness: 0.2 + Math.random() * 0.28,
+          tier: 0,
+        })
       }
 
       const engineId = engine.addParticle({
@@ -413,7 +382,7 @@ export function useDandelionPhysics(
         engineId,
         distFromCenter: dist,
         warmup: 0,
-        layer: Math.min(2, Math.floor((dist / 36) * 3)),
+        layer: Math.min(2, Math.floor((dist / headSpread) * 3)),
       })
     }
 
@@ -451,13 +420,14 @@ export function useDandelionPhysics(
   }
 
   function drawTrails(ctx: CanvasRenderingContext2D): void {
+    if (trails.length === 0) return
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
 
     for (const t of trails) {
       const lifeRatio = t.life / t.maxLife
       const age = 1 - lifeRatio
-      const alpha = lifeRatio * (0.28 + (1 - age) * 0.22)
+      const alpha = lifeRatio * (0.32 + (1 - age) * 0.2)
       const speed = Math.hypot(t.vx, t.vy) || 0.01
       const nx = t.vx / speed
       const ny = t.vy / speed
@@ -472,34 +442,23 @@ export function useDandelionPhysics(
       const cx = t.x + px * len * 0.22 * Math.sin(t.phase + age * 3)
       const cy = t.y + py * len * 0.22 * Math.sin(t.phase + age * 3)
 
-      const c0 = trailColor(t.tint, alpha * 0.55)
       const c1 = trailColor(Math.min(1, t.tint + 0.25), alpha)
-      const c2 = trailColor(Math.min(1, t.tint + 0.45), alpha * 0.35)
 
-      const grad = ctx.createLinearGradient(x0, y0, x1, y1)
-      grad.addColorStop(0, `rgba(${c0.r}, ${c0.g}, ${c0.b}, 0)`)
-      grad.addColorStop(0.35, `rgba(${c1.r}, ${c1.g}, ${c1.b}, ${c1.a})`)
-      grad.addColorStop(1, `rgba(${c2.r}, ${c2.g}, ${c2.b}, 0)`)
-
-      ctx.strokeStyle = grad
+      ctx.strokeStyle = `rgba(${c1.r}, ${c1.g}, ${c1.b}, ${c1.a})`
       ctx.lineWidth = t.width * (0.6 + lifeRatio * 0.9)
       ctx.lineCap = 'round'
-      ctx.shadowBlur = 14 + lifeRatio * 10
-      ctx.shadowColor = `rgba(${c1.r}, ${c1.g}, ${c1.b}, ${alpha * 0.45})`
       ctx.beginPath()
       ctx.moveTo(x0, y0)
       ctx.quadraticCurveTo(cx, cy, x1, y1)
       ctx.stroke()
 
-      const core = trailColor(t.tint + 0.1, alpha * 0.75)
+      const core = trailColor(t.tint + 0.1, alpha * 0.65)
       ctx.fillStyle = `rgba(${core.r}, ${core.g}, ${core.b}, ${core.a})`
-      ctx.shadowBlur = 18
       ctx.beginPath()
       ctx.arc(t.x, t.y, 1.2 + lifeRatio * 2.4, 0, Math.PI * 2)
       ctx.fill()
     }
 
-    ctx.shadowBlur = 0
     ctx.globalCompositeOperation = 'source-over'
     ctx.restore()
   }
@@ -514,7 +473,7 @@ export function useDandelionPhysics(
     const head = getHead()
     const mouseVec = mouse ?? head
     const headDist = Math.hypot(mouseVec.x - head.x, mouseVec.y - head.y)
-    const hoverRadius = 180
+    const hoverRadius = headSpread * 0.95
     const hoverPull = headDist < hoverRadius ? Math.pow(1 - headDist / hoverRadius, 1.5) : 0
     const gustNoise = sharedPerlin.fbm(head.x * 0.0015 + time * 0.00006, head.y * 0.0015, 2)
     const gustPulse = 0.35 + Math.max(0, Math.sin(time * 0.0016 + gustNoise * Math.PI * 2))
@@ -535,7 +494,7 @@ export function useDandelionPhysics(
       }
 
       const fluffWind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
-      const fluffMouse = computeMouseWind(mouseVec, p, 140, 0.75 + hoverPull * 1.2, gustPulse)
+      const fluffMouse = computeMouseWind(mouseVec, p, headSpread * 0.75, 0.75 + hoverPull * 1.2, gustPulse)
       const forceScale = dt * 0.0035
       return {
         x: (fluffWind.x * 0.38 + fluffMouse.x) * forceScale,
@@ -580,7 +539,7 @@ export function useDandelionPhysics(
       const gustPulse = 0.28 + Math.max(0, Math.sin(time * 0.0018 + seed.offsetX * 0.08 + seed.layer * 0.7))
       const gust = 0.55 + gustPulse * 0.9 + swirl * 0.45
       const drift = 0.55 + seed.warmup * 1.5
-      const inertia = 0.9 + (1 - Math.min(seed.distFromCenter / 44, 1)) * 1.1
+      const inertia = 0.9 + (1 - Math.min(seed.distFromCenter / headSpread, 1)) * 1.1
 
       seed.vx += ((Math.sin(time * 0.0028 + seed.offsetX) * 0.08 + gust * 0.05) * drift) / (seed.mass * inertia)
       seed.vy += ((Math.cos(time * 0.0022 + seed.offsetY) * 0.05 - 0.03 + gust * 0.02) * drift) / (seed.mass * inertia)
@@ -614,7 +573,7 @@ export function useDandelionPhysics(
         const dx = mouse ? mouse.x - seed.x : head.x - seed.x
         const dy = mouse ? mouse.y - seed.y : head.y - seed.y
         const dist = Math.hypot(dx, dy)
-        const radius = 250
+        const radius = headSpread * 1.1
         if (dist < radius) {
           const influence = Math.pow(1 - dist / radius, 1.45)
           const layerDelay = [0.6, 0.35, 0.18][seed.layer] ?? 0.3
@@ -661,7 +620,7 @@ export function useDandelionPhysics(
       : 1
 
     if (phase.value === 'idle' || phase.value === 'blowing') {
-      drawHead(ctx, head.x, head.y, 14 * headAlpha)
+      drawHead(ctx, head.x, head.y, coreRadius * headAlpha, headSpread)
     }
 
     for (const seed of seeds) {
@@ -692,6 +651,7 @@ export function useDandelionPhysics(
         svy,
         seed.bristles,
         seed.distFromCenter,
+        headSpread,
         seedAlpha,
         seed.angleJitter,
         seed.warmup,
@@ -720,7 +680,7 @@ export function useDandelionPhysics(
       return
     }
 
-    const dpr = window.devicePixelRatio || 1
+    const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR)
     const w = canvas.clientWidth
     const h = canvas.clientHeight
 
@@ -771,7 +731,12 @@ export function useDandelionPhysics(
     const y = e.clientY - rect.top
 
     if (prevMouse && phase.value === 'idle') {
-      spawnTrail(x, y, x - prevMouse.x, y - prevMouse.y)
+      const moved = Math.hypot(x - prevMouse.x, y - prevMouse.y)
+      const now = performance.now()
+      if (moved > 3 && now - lastTrailAt > 28) {
+        spawnTrail(x, y, x - prevMouse.x, y - prevMouse.y)
+        lastTrailAt = now
+      }
     }
 
     prevMouse = { x, y }
@@ -783,29 +748,46 @@ export function useDandelionPhysics(
     const dx = x - head.x
     const dy = y - head.y
     const dist = Math.hypot(dx, dy)
-    const enterRadius = 310
+    const enterRadius = headSpread * 1.12
+    const seedRadius = headSpread * 0.62
+    const speed = prevMouse
+      ? Math.max(
+          Math.hypot(e.movementX, e.movementY),
+          Math.hypot(x - prevMouse.x, y - prevMouse.y),
+        )
+      : Math.hypot(e.movementX, e.movementY)
 
-    if (dist < enterRadius) {
-      const speed = Math.hypot(e.movementX, e.movementY)
-      const intensity = Math.min(1, Math.max(0.18, speed / 18))
-      const proximity = Math.pow(1 - dist / enterRadius, 1.2)
-      const triggerAmount = intensity * proximity
+    if (dist >= enterRadius) return
 
-      for (const seed of seeds) {
-        if (seed.detached) continue
-        const sx = seed.x - x
-        const sy = seed.y - y
-        const sDist = Math.hypot(sx, sy)
-        const seedRadius = 140
-        if (sDist < seedRadius) {
-          const warm = Math.max(0, 1 - sDist / seedRadius)
-          const layerBoost = [0.7, 0.95, 1.2][seed.layer] ?? 0.85
-          seed.warmup = Math.min(1, seed.warmup + warm * triggerAmount * layerBoost * 0.08)
-          const push = triggerAmount * warm * (0.45 + speed / 25) * layerBoost
-          seed.vx += (sx / (sDist || 1)) * push * 0.4
-          seed.vy += (sy / (sDist || 1)) * push * 0.25 - push * 0.08
-        }
+    const intensity = Math.min(1, Math.max(0.15, speed / 14))
+    const proximity = Math.pow(1 - dist / enterRadius, 1.15)
+    const triggerAmount = intensity * proximity
+
+    let peakWarmup = 0
+    let warmedCount = 0
+
+    for (const seed of seeds) {
+      if (seed.detached) continue
+      const p = engine.particles[seed.engineId]
+      const sx = p.x - x
+      const sy = p.y - y
+      const sDist = Math.hypot(sx, sy)
+      if (sDist < seedRadius) {
+        const warm = Math.max(0, 1 - sDist / seedRadius)
+        const layerBoost = [0.7, 0.95, 1.2][seed.layer] ?? 0.85
+        const delta = warm * triggerAmount * layerBoost * 0.14
+        seed.warmup = Math.min(1, seed.warmup + delta)
+        peakWarmup = Math.max(peakWarmup, seed.warmup)
+        if (seed.warmup > 0.38) warmedCount++
       }
+    }
+
+    const fastSwipe = speed > 5 && triggerAmount > 0.28
+    const enoughWarmth = warmedCount >= 12 && peakWarmup >= 0.55
+    const deepWarmth = peakWarmup >= 0.72 && speed > 2
+
+    if (fastSwipe || enoughWarmth || deepWarmth) {
+      triggerBlow(x, y)
     }
   }
 
@@ -825,7 +807,7 @@ export function useDandelionPhysics(
         const dx = seed.x - originX
         const dy = seed.y - originY
         const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const push = Math.max(0, 1 - dist / 220)
+        const push = Math.max(0, 1 - dist / (headSpread * 1.1))
         seed.vx += (dx / dist) * push * 4.5
         seed.vy += (dy / dist) * push * 2.5 - push * 0.8
       }
@@ -841,14 +823,10 @@ export function useDandelionPhysics(
 
   onMounted(() => {
     rafId = requestAnimationFrame(tick)
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerleave', onPointerLeave)
   })
 
   onUnmounted(() => {
     cancelAnimationFrame(rafId)
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerleave', onPointerLeave)
   })
 
   return {

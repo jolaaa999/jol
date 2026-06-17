@@ -7,6 +7,6 @@ export interface LandingLayout {
 
 export function getLandingLayout(width: number, height: number): LandingLayout {
   const groundY = height - Math.max(12, height * 0.018)
-  const headY = height * 0.4
+  const headY = height * 0.42
   return { cx: width * 0.5, headY, groundY }
 }
