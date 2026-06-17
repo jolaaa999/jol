@@ -33,6 +33,8 @@ interface PappusBristle {
   angle: number
   length: number
   thickness: number
+  glow: number
+  phase: number
   /** 0 内层短绒, 1 中层, 2 外层长丝 */
   tier: number
 }
@@ -91,6 +93,36 @@ function computeMouseWind(
   return {
     x: (nx * 0.75 - ny * 0.25 * swirl) * strength * falloff * gustBoost,
     y: (ny * 0.45 + nx * 0.18 * swirl) * strength * falloff * gustBoost,
+  }
+}
+
+function computeCursorWind(
+  mouse: Vec2,
+  velocity: Vec2,
+  target: Vec2,
+  radius: number,
+  strength: number,
+): Vec2 {
+  const speed = Math.hypot(velocity.x, velocity.y)
+  if (speed < 0.5) return { x: 0, y: 0 }
+
+  const dx = target.x - mouse.x
+  const dy = target.y - mouse.y
+  const dist = Math.hypot(dx, dy)
+  if (dist > radius) return { x: 0, y: 0 }
+
+  const windX = velocity.x / speed
+  const windY = velocity.y / speed
+  const side = Math.abs(dx * -windY + dy * windX)
+  const ahead = dx * windX + dy * windY
+  const corridor = Math.max(0, 1 - side / (radius * 0.48))
+  const reach = Math.max(0, 1 - Math.max(0, ahead) / radius)
+  const wake = ahead > -radius * 0.45 ? corridor * reach : 0
+  const pulse = Math.min(1, speed / 22) * wake * strength
+
+  return {
+    x: windX * pulse,
+    y: windY * pulse * 0.72,
   }
 }
 
@@ -161,28 +193,49 @@ function drawFluffSeed(
   const twinkle = 0.72 + Math.sin(time * 0.005 + distFromCenter * 0.22 + x * 0.01) * 0.28
   const starAlpha = alpha * edgeFade * layerAlpha * twinkle
   const rayStretch = 1 + warmup * 0.85 + Math.min(speed * 0.18, 0.55)
+  const haloRadius = 2.8 + layer * 0.9 + warmup * 2.4 + Math.min(speed * 0.28, 3.2)
 
   ctx.save()
-  ctx.globalAlpha = starAlpha
-  ctx.lineCap = 'round'
+  ctx.globalAlpha = Math.min(1, starAlpha)
+  ctx.globalCompositeOperation = 'lighter'
+
+  const halo = ctx.createRadialGradient(x, y, 0, x, y, haloRadius)
+  halo.addColorStop(0, `rgba(255, 255, 255, ${0.36 + warmup * 0.26})`)
+  halo.addColorStop(0.35, 'rgba(220, 244, 255, 0.18)')
+  halo.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  ctx.fillStyle = halo
+  ctx.beginPath()
+  ctx.arc(x, y, haloRadius, 0, Math.PI * 2)
+  ctx.fill()
 
   for (const bristle of bristles) {
-    const jitter = angleJitter * 0.08 + Math.sin(time * 0.003 + bristle.angle * 2.3) * 0.04
+    const jitter = angleJitter * 0.08 + Math.sin(time * 0.003 + bristle.phase) * 0.08
     const angle = bristle.angle + motionAngle * (0.08 + warmup * 0.12) + jitter
     const len = bristle.length * rayStretch
-    const lit = 0.5 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.28
+    const px = x + Math.cos(angle) * len
+    const py = y + Math.sin(angle) * len
+    const pulse = 0.72 + Math.sin(time * 0.006 + bristle.phase) * 0.28
+    const size = bristle.thickness * (1 + warmup * 0.85) * pulse
+    const dotGlow = size * (2.6 + bristle.glow * 1.8)
 
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.45 + lit * 0.45})`
-    ctx.lineWidth = bristle.thickness
+    const dot = ctx.createRadialGradient(px, py, 0, px, py, dotGlow)
+    dot.addColorStop(0, 'rgba(255, 255, 255, 0.96)')
+    dot.addColorStop(0.32, 'rgba(235, 248, 255, 0.42)')
+    dot.addColorStop(1, 'rgba(255, 255, 255, 0)')
+    ctx.fillStyle = dot
     ctx.beginPath()
-    ctx.moveTo(x, y)
-    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len)
-    ctx.stroke()
+    ctx.arc(px, py, dotGlow, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)'
+    ctx.beginPath()
+    ctx.arc(px, py, Math.max(0.45, size), 0, Math.PI * 2)
+    ctx.fill()
   }
 
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.82 + warmup * 0.18})`
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.9 + warmup * 0.1})`
   ctx.beginPath()
-  ctx.arc(x, y, 0.35 + layer * 0.08 + warmup * 0.25, 0, Math.PI * 2)
+  ctx.arc(x, y, 0.65 + layer * 0.14 + warmup * 0.34, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -265,6 +318,7 @@ export function useDandelionPhysics(
   let trails: WindTrail[] = []
   let mouse: Vec2 | null = null
   let prevMouse: Vec2 | null = null
+  let mouseVelocity: Vec2 = { x: 0, y: 0 }
   let rootPos: Vec2 = { x: 0, y: 0 }
   let headEngineId = 0
   let rafId = 0
@@ -335,13 +389,15 @@ export function useDandelionPhysics(
 
       const bristles: PappusBristle[] = []
       const baseAngle = angle + Math.PI
-      const rayCount = 2 + Math.floor(Math.random() * 2)
+      const rayCount = 5 + Math.floor(Math.random() * 4)
 
       for (let b = 0; b < rayCount; b++) {
         bristles.push({
           angle: baseAngle + (b - rayCount / 2) * 0.55 + (Math.random() - 0.5) * 0.35,
-          length: 2 + Math.random() * 4.5,
-          thickness: 0.2 + Math.random() * 0.28,
+          length: 2.4 + Math.random() * 6.8,
+          thickness: 0.42 + Math.random() * 0.5,
+          glow: 0.45 + Math.random() * 0.75,
+          phase: Math.random() * Math.PI * 2,
           tier: 0,
         })
       }
@@ -478,6 +534,7 @@ export function useDandelionPhysics(
     const gustNoise = sharedPerlin.fbm(head.x * 0.0015 + time * 0.00006, head.y * 0.0015, 2)
     const gustPulse = 0.35 + Math.max(0, Math.sin(time * 0.0016 + gustNoise * Math.PI * 2))
     const gustWind = computeMouseWind(mouseVec, head, hoverRadius, 1.0 + hoverPull * 1.1, gustPulse)
+    const cursorWind = computeCursorWind(mouseVec, mouseVelocity, head, headSpread * 1.25, 1.35 + hoverPull)
     const ambientHead = sharedPerlin.sampleWindField(head.x, head.y, time, 0.0014, 3)
 
     engine!.step(dt, (p, i) => {
@@ -488,17 +545,18 @@ export function useDandelionPhysics(
         const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.002, 4)
         const forceScale = dt * 0.0042
         return {
-          x: (gustWind.x * nodeFactor * 1.2 + ambient.x * 0.08 * nodeFactor + ambientHead.x * hoverPull * 0.04) * forceScale,
-          y: (gustWind.y * nodeFactor * 0.8 + ambient.y * 0.05 * nodeFactor + ambientHead.y * hoverPull * 0.03) * forceScale,
+          x: ((gustWind.x + cursorWind.x * 1.4) * nodeFactor * 1.2 + ambient.x * 0.08 * nodeFactor + ambientHead.x * hoverPull * 0.04) * forceScale,
+          y: ((gustWind.y + cursorWind.y) * nodeFactor * 0.8 + ambient.y * 0.05 * nodeFactor + ambientHead.y * hoverPull * 0.03) * forceScale,
         }
       }
 
       const fluffWind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
       const fluffMouse = computeMouseWind(mouseVec, p, headSpread * 0.75, 0.75 + hoverPull * 1.2, gustPulse)
+      const fluffCursor = computeCursorWind(mouseVec, mouseVelocity, p, headSpread * 0.95, 1.8 + hoverPull)
       const forceScale = dt * 0.0035
       return {
-        x: (fluffWind.x * 0.38 + fluffMouse.x) * forceScale,
-        y: (fluffWind.y * 0.22 + fluffMouse.y) * forceScale,
+        x: (fluffWind.x * 0.38 + fluffMouse.x + fluffCursor.x) * forceScale,
+        y: (fluffWind.y * 0.22 + fluffMouse.y + fluffCursor.y) * forceScale,
       }
     })
   }
@@ -729,16 +787,21 @@ export function useDandelionPhysics(
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
+    const previousMouse = prevMouse
+    const frameVelocity = previousMouse
+      ? { x: x - previousMouse.x, y: y - previousMouse.y }
+      : { x: e.movementX, y: e.movementY }
 
-    if (prevMouse && phase.value === 'idle') {
-      const moved = Math.hypot(x - prevMouse.x, y - prevMouse.y)
+    if (previousMouse && phase.value === 'idle') {
+      const moved = Math.hypot(frameVelocity.x, frameVelocity.y)
       const now = performance.now()
       if (moved > 3 && now - lastTrailAt > 28) {
-        spawnTrail(x, y, x - prevMouse.x, y - prevMouse.y)
+        spawnTrail(x, y, frameVelocity.x, frameVelocity.y)
         lastTrailAt = now
       }
     }
 
+    mouseVelocity = frameVelocity
     prevMouse = { x, y }
     mouse = { x, y }
 
@@ -749,11 +812,11 @@ export function useDandelionPhysics(
     const dy = y - head.y
     const dist = Math.hypot(dx, dy)
     const enterRadius = headSpread * 1.12
-    const seedRadius = headSpread * 0.62
-    const speed = prevMouse
+    const seedRadius = headSpread * 0.78
+    const speed = previousMouse
       ? Math.max(
           Math.hypot(e.movementX, e.movementY),
-          Math.hypot(x - prevMouse.x, y - prevMouse.y),
+          Math.hypot(frameVelocity.x, frameVelocity.y),
         )
       : Math.hypot(e.movementX, e.movementY)
 
@@ -782,7 +845,7 @@ export function useDandelionPhysics(
       }
     }
 
-    const fastSwipe = speed > 5 && triggerAmount > 0.28
+    const fastSwipe = speed > 4 && triggerAmount > 0.2
     const enoughWarmth = warmedCount >= 12 && peakWarmup >= 0.55
     const deepWarmth = peakWarmup >= 0.72 && speed > 2
 
@@ -794,6 +857,7 @@ export function useDandelionPhysics(
   function onPointerLeave(): void {
     mouse = null
     prevMouse = null
+    mouseVelocity = { x: 0, y: 0 }
   }
 
   function triggerBlow(originX?: number, originY?: number): void {
@@ -803,13 +867,17 @@ export function useDandelionPhysics(
     detachSeeds()
 
     if (originX !== undefined && originY !== undefined) {
+      const windSpeed = Math.hypot(mouseVelocity.x, mouseVelocity.y)
+      const windX = windSpeed > 0.5 ? mouseVelocity.x / windSpeed : 0
+      const windY = windSpeed > 0.5 ? mouseVelocity.y / windSpeed : 0
       for (const seed of seeds) {
         const dx = seed.x - originX
         const dy = seed.y - originY
         const dist = Math.sqrt(dx * dx + dy * dy) || 1
         const push = Math.max(0, 1 - dist / (headSpread * 1.1))
-        seed.vx += (dx / dist) * push * 4.5
-        seed.vy += (dy / dist) * push * 2.5 - push * 0.8
+        const directionalPush = push * Math.min(1, windSpeed / 18)
+        seed.vx += (dx / dist) * push * 3.2 + windX * directionalPush * 7.5
+        seed.vy += (dy / dist) * push * 1.8 + windY * directionalPush * 4.8 - push * 0.8
       }
     }
   }
