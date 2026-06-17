@@ -24,12 +24,17 @@ interface WindTrail {
   life: number
   maxLife: number
   width: number
+  /** 0 = 粉, 1 = 蓝 */
+  tint: number
+  phase: number
 }
 
 interface PappusBristle {
   angle: number
   length: number
   thickness: number
+  /** 0 内层短绒, 1 中层, 2 外层长丝 */
+  tier: number
 }
 
 interface FluffSeed {
@@ -144,55 +149,77 @@ function drawFluffSeed(
 ): void {
   const speed = Math.sqrt(vx * vx + vy * vy)
   const motionAngle = speed > 0.03 ? Math.atan2(vy, vx) : 0
-  const spread = 1.18 + Math.min(speed * 0.13, 1) + warmup * 0.42
-  const edgeFade = 0.16 + (1 - Math.min(distFromCenter / 44, 1)) * 0.84
+  const layerScale = [0.82, 1.0, 1.18][layer] ?? 1
+  const spread = (1.12 + Math.min(speed * 0.12, 0.95) + warmup * 0.42) * layerScale
+  const edgeFade = 0.22 + (1 - Math.min(distFromCenter / 44, 1)) * 0.78
+  const layerAlpha = [0.72, 0.88, 1.0][layer] ?? 0.85
   const tremorFreq = [0.007, 0.011, 0.016][layer] ?? 0.01
-  const tremorAmp = [0.08, 0.13, 0.2][layer] ?? 0.08
+  const tremorAmp = [0.06, 0.1, 0.16][layer] ?? 0.08
   const tremor = Math.sin(time * tremorFreq + distFromCenter * 0.18) * (warmup + 0.08) * tremorAmp
 
   ctx.save()
-  ctx.globalAlpha = alpha * edgeFade
+  ctx.globalAlpha = alpha * edgeFade * layerAlpha
 
-  const halo = ctx.createRadialGradient(x, y, 0, x, y, 24 + layer * 6)
-  halo.addColorStop(0, 'rgba(255,255,255,0.26)')
-  halo.addColorStop(0.45, 'rgba(255,255,255,0.12)')
-  halo.addColorStop(1, 'rgba(255,255,255,0)')
+  const haloR = (2.8 + layer * 1.4 + edgeFade * 2.2 + warmup * 3.5) * layerScale
+  const halo = ctx.createRadialGradient(x, y, 0, x, y, haloR)
+  halo.addColorStop(0, `rgba(255, 252, 248, ${0.55 + warmup * 0.25})`)
+  halo.addColorStop(0.35, `rgba(255, 255, 255, ${0.28 + edgeFade * 0.18})`)
+  halo.addColorStop(1, 'rgba(255, 255, 255, 0)')
   ctx.fillStyle = halo
   ctx.beginPath()
-  ctx.arc(x, y, 24 + layer * 6, 0, Math.PI * 2)
+  ctx.arc(x, y, haloR, 0, Math.PI * 2)
   ctx.fill()
 
-  for (const bristle of bristles) {
-    const jitter = angleJitter + Math.sin(distFromCenter * 0.12 + bristle.angle * 1.7) * 0.12 + tremor * 0.35
-    const angle = bristle.angle + motionAngle * (0.16 + warmup * 0.18) + jitter * 0.1
-    const len = bristle.length * (1 + Math.sin(angle * 1.7 + speed * 0.05) * 0.035) * spread
-    const ex = x + Math.cos(angle) * len
-    const ey = y + Math.sin(angle) * len
-    const lit = 0.45 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.3
+  const sorted = [...bristles].sort((a, b) => b.tier - a.tier)
+  const tierStyle = [
+    { alpha: 0.42, blur: 2, widthBoost: 0.15, curl: 0.08 },
+    { alpha: 0.62, blur: 5, widthBoost: 0.35, curl: 0.12 },
+    { alpha: 0.78, blur: 9, widthBoost: 0.55, curl: 0.18 },
+  ] as const
 
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.46 + lit * 0.36})`
-    ctx.lineWidth = bristle.thickness + 0.3 + warmup * 0.18
-    ctx.shadowBlur = 3 + warmup * 6
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.55)'
+  for (const bristle of sorted) {
+    const style = tierStyle[bristle.tier] ?? tierStyle[1]
+    const jitter = angleJitter + Math.sin(distFromCenter * 0.12 + bristle.angle * 1.7) * 0.14 + tremor * 0.4
+    const angle = bristle.angle + motionAngle * (0.14 + warmup * 0.2 + bristle.tier * 0.04) + jitter * 0.12
+    const len = bristle.length * (1 + Math.sin(angle * 1.7 + speed * 0.05) * 0.04) * spread
+    const curl = style.curl * len * (0.6 + Math.sin(time * 0.003 + bristle.angle * 2.1) * 0.4)
+    const perpX = -Math.sin(angle)
+    const perpY = Math.cos(angle)
+    const midX = x + Math.cos(angle) * len * 0.55 + perpX * curl
+    const midY = y + Math.sin(angle) * len * 0.55 + perpY * curl
+    const ex = x + Math.cos(angle) * len + perpX * curl * 0.35
+    const ey = y + Math.sin(angle) * len + perpY * curl * 0.35
+    const lit = 0.42 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.32
+
+    ctx.strokeStyle = `rgba(255, 255, 255, ${style.alpha + lit * 0.38})`
+    ctx.lineWidth = bristle.thickness + style.widthBoost + warmup * 0.25
+    ctx.lineCap = 'round'
+    ctx.shadowBlur = style.blur + warmup * 6
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.7)'
     ctx.beginPath()
     ctx.moveTo(x, y)
-    ctx.lineTo(ex, ey)
+    ctx.quadraticCurveTo(midX, midY, ex, ey)
     ctx.stroke()
 
-    ctx.globalAlpha = alpha * edgeFade * 0.55
-    ctx.strokeStyle = 'rgba(255,255,255,0.26)'
-    ctx.lineWidth = Math.max(0.4, bristle.thickness * 0.7)
-    ctx.beginPath()
-    ctx.moveTo(x, y)
-    ctx.lineTo(x + Math.cos(angle + 0.08) * (len * 0.62), y + Math.sin(angle + 0.08) * (len * 0.62))
-    ctx.stroke()
-    ctx.globalAlpha = alpha * edgeFade
+    if (bristle.tier >= 1) {
+      const tipLen = len * (0.12 + bristle.tier * 0.04)
+      const tipSign = Math.sin(bristle.angle * 3.7 + distFromCenter) > 0 ? 1 : -1
+      const tipAngle = angle + tipSign * 0.22
+      ctx.globalAlpha = alpha * edgeFade * layerAlpha * 0.35
+      ctx.lineWidth = Math.max(0.2, bristle.thickness * 0.45)
+      ctx.shadowBlur = 3
+      ctx.beginPath()
+      ctx.moveTo(ex, ey)
+      ctx.lineTo(ex + Math.cos(tipAngle) * tipLen, ey + Math.sin(tipAngle) * tipLen)
+      ctx.stroke()
+      ctx.globalAlpha = alpha * edgeFade * layerAlpha
+    }
   }
 
   ctx.shadowBlur = 0
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.8 + edgeFade * 0.2})`
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.78 + edgeFade * 0.22})`
   ctx.beginPath()
-  ctx.arc(x, y, 1.2 + edgeFade * 0.8 + warmup * 0.5, 0, Math.PI * 2)
+  ctx.arc(x, y, (0.9 + layer * 0.25 + edgeFade * 0.65 + warmup * 0.55) * layerScale, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -232,7 +259,20 @@ function drawRoot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 
 const STEM_NODES = 8
 const SEED_COUNT = 96
-const TRAIL_MAX = 48
+const TRAIL_MAX = 56
+
+/** 粉蓝梦幻流线色 — 呼应天空 dawn / mid 色调 */
+function trailColor(tint: number, alpha: number): { r: number; g: number; b: number; a: number } {
+  const pink = { r: 255, g: 198, b: 228 }
+  const blue = { r: 148, g: 210, b: 255 }
+  const t = tint * tint * (3 - 2 * tint)
+  return {
+    r: Math.round(pink.r + (blue.r - pink.r) * t),
+    g: Math.round(pink.g + (blue.g - pink.g) * t),
+    b: Math.round(pink.b + (blue.b - pink.b) * t),
+    a: alpha,
+  }
+}
 
 export function useDandelionPhysics(
   canvasRef: Ref<HTMLCanvasElement | null>,
@@ -318,14 +358,23 @@ export function useDandelionPhysics(
       const sx = cx + ox
       const sy = seedAnchorY + oy
 
-      const bristleCount = 4 + Math.floor(Math.random() * 4)
       const bristles: PappusBristle[] = []
-      for (let b = 0; b < bristleCount; b++) {
-        bristles.push({
-          angle: angle + Math.PI + (b - bristleCount / 2) * 0.12 + (Math.random() - 0.5) * 0.15,
-          length: 10 + Math.random() * 14 + (1 - dist / 36) * 8,
-          thickness: 0.45 + Math.random() * 0.55,
-        })
+      const baseAngle = angle + Math.PI
+
+      for (let tier = 0; tier < 3; tier++) {
+        const tierCount = tier === 0 ? 3 + Math.floor(Math.random() * 3) : tier === 1 ? 4 + Math.floor(Math.random() * 3) : 5 + Math.floor(Math.random() * 4)
+        const tierLenBase = tier === 0 ? 5 : tier === 1 ? 10 : 16
+        const tierLenRange = tier === 0 ? 5 : tier === 1 ? 8 : 12
+        const tierThick = tier === 0 ? 0.28 : tier === 1 ? 0.42 : 0.55
+        for (let b = 0; b < tierCount; b++) {
+          const spread = (b - tierCount / 2) * (tier === 0 ? 0.18 : tier === 1 ? 0.14 : 0.11)
+          bristles.push({
+            angle: baseAngle + spread + (Math.random() - 0.5) * 0.2,
+            length: tierLenBase + Math.random() * tierLenRange + (1 - dist / 36) * (tier + 1) * 3,
+            thickness: tierThick + Math.random() * 0.35,
+            tier,
+          })
+        }
       }
 
       const engineId = engine.addParticle({
@@ -378,53 +427,81 @@ export function useDandelionPhysics(
     trails.push({
       x,
       y,
-      vx: vx * 0.55 + (Math.random() - 0.5) * 1.2,
-      vy: vy * 0.55 + (Math.random() - 0.5) * 1.2,
+      vx: vx * 0.42 + (Math.random() - 0.5) * 0.7,
+      vy: vy * 0.42 + (Math.random() - 0.5) * 0.7,
       life: 1,
-      maxLife: 0.6 + Math.random() * 0.5,
-      width: 1 + Math.random() * 2.4,
+      maxLife: 0.65 + Math.random() * 0.55,
+      width: 1.2 + Math.random() * 2.2,
+      tint: 0.15 + Math.random() * 0.7,
+      phase: Math.random() * Math.PI * 2,
     })
     if (trails.length > TRAIL_MAX) trails.shift()
   }
 
   function updateTrails(dt: number): void {
     trails = trails.filter((t) => {
-      t.life -= dt * 0.0012
-      t.x += t.vx
-      t.y += t.vy
-      t.vx *= 0.96
-      t.vy *= 0.96
+      t.life -= dt * 0.00085
+      const drift = Math.sin(t.phase + t.life * 4.2) * 0.18
+      t.x += t.vx + drift
+      t.y += t.vy - drift * 0.6
+      t.vx *= 0.965
+      t.vy *= 0.965
       return t.life > 0
     })
   }
 
   function drawTrails(ctx: CanvasRenderingContext2D): void {
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+
     for (const t of trails) {
-      const age = 1 - t.life / t.maxLife
-      const alpha = (t.life / t.maxLife) * 0.42
-      const sway = Math.sin(t.x * 0.01 + t.y * 0.012 + age * Math.PI) * 0.5
-      const mx = t.x + t.vx * 0.5
-      const my = t.y + t.vy * 0.5
-      ctx.save()
-      ctx.globalAlpha = alpha
-      const grad = ctx.createLinearGradient(t.x, t.y, mx, my)
-      grad.addColorStop(0, 'rgba(255, 214, 247, 0.2)')
-      grad.addColorStop(0.45, 'rgba(195, 224, 255, 0.75)')
-      grad.addColorStop(1, 'rgba(173, 190, 255, 0.18)')
+      const lifeRatio = t.life / t.maxLife
+      const age = 1 - lifeRatio
+      const alpha = lifeRatio * (0.28 + (1 - age) * 0.22)
+      const speed = Math.hypot(t.vx, t.vy) || 0.01
+      const nx = t.vx / speed
+      const ny = t.vy / speed
+      const px = -ny
+      const py = nx
+      const len = 12 + speed * 2.8 + age * 18
+
+      const x0 = t.x - nx * len * 0.85
+      const y0 = t.y - ny * len * 0.85
+      const x1 = t.x + nx * len * 0.35
+      const y1 = t.y + ny * len * 0.35
+      const cx = t.x + px * len * 0.22 * Math.sin(t.phase + age * 3)
+      const cy = t.y + py * len * 0.22 * Math.sin(t.phase + age * 3)
+
+      const c0 = trailColor(t.tint, alpha * 0.55)
+      const c1 = trailColor(Math.min(1, t.tint + 0.25), alpha)
+      const c2 = trailColor(Math.min(1, t.tint + 0.45), alpha * 0.35)
+
+      const grad = ctx.createLinearGradient(x0, y0, x1, y1)
+      grad.addColorStop(0, `rgba(${c0.r}, ${c0.g}, ${c0.b}, 0)`)
+      grad.addColorStop(0.35, `rgba(${c1.r}, ${c1.g}, ${c1.b}, ${c1.a})`)
+      grad.addColorStop(1, `rgba(${c2.r}, ${c2.g}, ${c2.b}, 0)`)
+
       ctx.strokeStyle = grad
-      ctx.lineWidth = t.width + age * 1.2
-      ctx.shadowBlur = 12
-      ctx.shadowColor = 'rgba(192, 212, 255, 0.4)'
+      ctx.lineWidth = t.width * (0.6 + lifeRatio * 0.9)
+      ctx.lineCap = 'round'
+      ctx.shadowBlur = 14 + lifeRatio * 10
+      ctx.shadowColor = `rgba(${c1.r}, ${c1.g}, ${c1.b}, ${alpha * 0.45})`
       ctx.beginPath()
-      ctx.moveTo(t.x - t.vx * 0.7, t.y - t.vy * 0.7)
-      ctx.quadraticCurveTo(t.x + sway * 8, t.y - sway * 8, mx + sway * 10, my - sway * 10)
+      ctx.moveTo(x0, y0)
+      ctx.quadraticCurveTo(cx, cy, x1, y1)
       ctx.stroke()
-      ctx.fillStyle = 'rgba(248, 245, 255, 0.8)'
+
+      const core = trailColor(t.tint + 0.1, alpha * 0.75)
+      ctx.fillStyle = `rgba(${core.r}, ${core.g}, ${core.b}, ${core.a})`
+      ctx.shadowBlur = 18
       ctx.beginPath()
-      ctx.arc(mx, my, 1.4 + age * 2.2, 0, Math.PI * 2)
+      ctx.arc(t.x, t.y, 1.2 + lifeRatio * 2.4, 0, Math.PI * 2)
       ctx.fill()
-      ctx.restore()
     }
+
+    ctx.shadowBlur = 0
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.restore()
   }
 
   // ── 物理更新 ──
@@ -563,7 +640,7 @@ export function useDandelionPhysics(
 
   // ── 渲染 ──
 
-  function renderFrame(ctx: CanvasRenderingContext2D): void {
+  function renderFrame(ctx: CanvasRenderingContext2D, time: number): void {
     ctx.clearRect(0, 0, canvasW, canvasH)
 
     drawTrails(ctx)
@@ -680,7 +757,7 @@ export function useDandelionPhysics(
       }
     }
 
-    renderFrame(ctx)
+    renderFrame(ctx, timestamp)
     rafId = requestAnimationFrame(tick)
   }
 
