@@ -8,6 +8,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import type { PoemLayout } from '@/types/poem'
 import { collectDistractorChars } from '@/utils/poemLayout'
+import { fontHasChar } from '@/utils/chineseFontLoader'
 
 export type PoemScenePhase = 'loading' | 'playing' | 'dissolving' | 'complete'
 
@@ -93,10 +94,11 @@ export function usePoemScene(
 
   function createGroundMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0x3d3018,
-      emissive: 0x000000,
-      metalness: 0.85,
-      roughness: 0.38,
+      color: 0xc4a060,
+      emissive: 0x6a5020,
+      emissiveIntensity: 0.55,
+      metalness: 0.65,
+      roughness: 0.32,
     })
   }
 
@@ -112,11 +114,23 @@ export function usePoemScene(
     })
   }
 
+  function makeBlankPlaceholder(pos: THREE.Vector3): THREE.Mesh {
+    const geo = new THREE.BoxGeometry(CHAR_SIZE * 0.85, CHAR_SIZE * 1.05, CHAR_DEPTH * 0.6)
+    const mat = createPlaceholderMaterial()
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.position.copy(pos)
+    mesh.userData.isPlaceholder = true
+    return mesh
+  }
+
   function makeTextMesh(
     font: Font,
     char: string,
     material: THREE.Material,
   ): THREE.Mesh {
+    if (!fontHasChar(font, char)) {
+      throw new Error(`Font missing glyph: ${char}`)
+    }
     const geo = new TextGeometry(char, {
       font,
       size: CHAR_SIZE,
@@ -166,9 +180,7 @@ export function usePoemScene(
       }
 
       if (slot.isBlank) {
-        const ph = makeTextMesh(font, '□', createPlaceholderMaterial())
-        ph.position.copy(pos)
-        ph.userData.isPlaceholder = true
+        const ph = makeBlankPlaceholder(pos)
         poemGroup.add(ph)
         entry.placeholder = ph
       } else {
@@ -262,16 +274,19 @@ export function usePoemScene(
     scene.fog = new THREE.FogExp2(0x050508, 0.045)
 
     camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 200)
-    camera.position.set(0, 1.2, 14)
-    camera.lookAt(0, 0, 0)
+    camera.position.set(0, 5.5, 11)
+    camera.lookAt(0, -0.5, 0)
 
-    scene.add(new THREE.AmbientLight(0x1a1a2e, 0.6))
-    const key = new THREE.DirectionalLight(0xffe8b0, 1.4)
-    key.position.set(4, 8, 6)
+    scene.add(new THREE.AmbientLight(0x2a2840, 0.85))
+    const key = new THREE.DirectionalLight(0xffe8b0, 1.6)
+    key.position.set(4, 10, 6)
     scene.add(key)
-    const rim = new THREE.PointLight(0xff9020, 0.8, 40)
-    rim.position.set(-6, 3, -4)
+    const rim = new THREE.PointLight(0xff9020, 1.1, 40)
+    rim.position.set(-6, 4, -4)
     scene.add(rim)
+    const groundLight = new THREE.PointLight(0xffcc66, 0.9, 30)
+    groundLight.position.set(0, 1, 4)
+    scene.add(groundLight)
 
     scene.add(poemGroup)
     scene.add(groundGroup)

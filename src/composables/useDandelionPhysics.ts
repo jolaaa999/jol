@@ -23,6 +23,7 @@ interface WindTrail {
   vy: number
   life: number
   maxLife: number
+  width: number
 }
 
 interface PappusBristle {
@@ -34,6 +35,7 @@ interface PappusBristle {
 interface FluffSeed {
   offsetX: number
   offsetY: number
+  angleJitter: number
   x: number
   y: number
   prevX: number
@@ -46,6 +48,8 @@ interface FluffSeed {
   detached: boolean
   engineId: number
   distFromCenter: number
+  warmup: number
+  layer: number
 }
 
 /** 全局光源 — 屏幕左上角 */
@@ -58,6 +62,7 @@ function computeMouseWind(
   target: Vec2,
   radius: number,
   strength: number,
+  gust: number,
 ): Vec2 {
   const dx = mouse.x - target.x
   const dy = mouse.y - target.y
@@ -69,10 +74,12 @@ function computeMouseWind(
   const falloff = (1 - dist / radius) ** 2
   const nx = dx / dist
   const ny = dy / dist
+  const swirl = sharedPerlin.fbm(target.x * 0.012, target.y * 0.012, 2)
+  const gustBoost = 0.8 + gust * 1.2
 
   return {
-    x: nx * strength * falloff,
-    y: ny * strength * falloff * 0.45,
+    x: (nx * 0.75 - ny * 0.25 * swirl) * strength * falloff * gustBoost,
+    y: (ny * 0.45 + nx * 0.18 * swirl) * strength * falloff * gustBoost,
   }
 }
 
@@ -130,24 +137,33 @@ function drawFluffSeed(
   bristles: PappusBristle[],
   distFromCenter: number,
   alpha: number,
+  angleJitter: number,
+  warmup: number,
+  layer: number,
 ): void {
   const speed = Math.sqrt(vx * vx + vy * vy)
-  const motionAngle = speed > 0.08 ? Math.atan2(vy, vx) : 0
-  const edgeFade = 0.45 + (1 - Math.min(distFromCenter / 36, 1)) * 0.55
+  const motionAngle = speed > 0.03 ? Math.atan2(vy, vx) : 0
+  const spread = 0.75 + Math.min(speed * 0.16, 1.5) + warmup * 0.75
+  const edgeFade = 0.22 + (1 - Math.min(distFromCenter / 36, 1)) * 0.78
+  const tremorFreq = [0.016, 0.024, 0.033][layer] ?? 0.02
+  const tremorAmp = [0.14, 0.28, 0.48][layer] ?? 0.2
+  const tremor = Math.sin(performance.now() * tremorFreq + distFromCenter * 0.35) * (warmup + 0.15) * tremorAmp
 
   ctx.save()
   ctx.globalAlpha = alpha * edgeFade
 
   for (const bristle of bristles) {
-    const angle = bristle.angle + motionAngle * 0.15
-    const ex = x + Math.cos(angle) * bristle.length
-    const ey = y + Math.sin(angle) * bristle.length
-    const lit = 0.5 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.25
+    const jitter = angleJitter + Math.sin(distFromCenter * 0.18 + bristle.angle * 2.7) * 0.25 + tremor * 0.75
+    const angle = bristle.angle + motionAngle * (0.22 + warmup * 0.35) + jitter * 0.18
+    const len = bristle.length * (1 + Math.sin(angle * 3.3 + speed * 0.08) * 0.08) * spread
+    const ex = x + Math.cos(angle) * len
+    const ey = y + Math.sin(angle) * len
+    const lit = 0.45 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.3
 
-    ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 + lit * 0.4})`
-    ctx.lineWidth = bristle.thickness + 0.25
-    ctx.shadowBlur = 3
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.55)'
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 + lit * 0.42})`
+    ctx.lineWidth = bristle.thickness + 0.35 + warmup * 0.2
+    ctx.shadowBlur = 4 + warmup * 8
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.65)'
     ctx.beginPath()
     ctx.moveTo(x, y)
     ctx.lineTo(ex, ey)
@@ -155,9 +171,9 @@ function drawFluffSeed(
   }
 
   ctx.shadowBlur = 0
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.8 + edgeFade * 0.2})`
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.82 + edgeFade * 0.18})`
   ctx.beginPath()
-  ctx.arc(x, y, 1 + edgeFade * 0.5, 0, Math.PI * 2)
+  ctx.arc(x, y, 1.1 + edgeFade * 0.7 + warmup * 0.6, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -283,13 +299,13 @@ export function useDandelionPhysics(
       const sx = cx + ox
       const sy = seedAnchorY + oy
 
-      const bristleCount = 2 + Math.floor(Math.random() * 3)
+      const bristleCount = 4 + Math.floor(Math.random() * 4)
       const bristles: PappusBristle[] = []
       for (let b = 0; b < bristleCount; b++) {
         bristles.push({
-          angle: angle + Math.PI + (b - bristleCount / 2) * 0.18,
-          length: 7 + Math.random() * 10 + (1 - dist / 36) * 4,
-          thickness: 0.35 + Math.random() * 0.35,
+          angle: angle + Math.PI + (b - bristleCount / 2) * 0.12 + (Math.random() - 0.5) * 0.15,
+          length: 10 + Math.random() * 14 + (1 - dist / 36) * 8,
+          thickness: 0.45 + Math.random() * 0.55,
         })
       }
 
@@ -315,6 +331,7 @@ export function useDandelionPhysics(
       seeds.push({
         offsetX: ox,
         offsetY: oy,
+        angleJitter: (Math.random() - 0.5) * 0.9,
         x: sx,
         y: sy,
         prevX: sx,
@@ -327,6 +344,8 @@ export function useDandelionPhysics(
         detached: false,
         engineId,
         distFromCenter: dist,
+        warmup: 0,
+        layer: Math.min(2, Math.floor((dist / 36) * 3)),
       })
     }
 
@@ -340,10 +359,11 @@ export function useDandelionPhysics(
     trails.push({
       x,
       y,
-      vx: vx * 0.3 + (Math.random() - 0.5) * 0.5,
-      vy: vy * 0.3 + (Math.random() - 0.5) * 0.5,
+      vx: vx * 0.45 + (Math.random() - 0.5) * 0.9,
+      vy: vy * 0.45 + (Math.random() - 0.5) * 0.9,
       life: 1,
-      maxLife: 0.6 + Math.random() * 0.4,
+      maxLife: 0.5 + Math.random() * 0.45,
+      width: 0.8 + Math.random() * 1.8,
     })
     if (trails.length > TRAIL_MAX) trails.shift()
   }
@@ -361,12 +381,21 @@ export function useDandelionPhysics(
 
   function drawTrails(ctx: CanvasRenderingContext2D): void {
     for (const t of trails) {
+      const age = 1 - t.life / t.maxLife
       const alpha = (t.life / t.maxLife) * 0.35
       ctx.save()
       ctx.globalAlpha = alpha
-      ctx.fillStyle = 'rgba(200, 230, 255, 0.8)'
+      ctx.strokeStyle = 'rgba(190, 225, 255, 0.75)'
+      ctx.lineWidth = t.width + age * 1.4
+      ctx.shadowBlur = 10
+      ctx.shadowColor = 'rgba(160, 210, 255, 0.35)'
       ctx.beginPath()
-      ctx.arc(t.x, t.y, 2 + (1 - t.life / t.maxLife) * 3, 0, Math.PI * 2)
+      ctx.moveTo(t.x - t.vx * 0.6, t.y - t.vy * 0.6)
+      ctx.quadraticCurveTo(t.x, t.y, t.x + t.vx * 0.6, t.y + t.vy * 0.6)
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(220, 245, 255, 0.72)'
+      ctx.beginPath()
+      ctx.arc(t.x, t.y, 1.5 + age * 2.6, 0, Math.PI * 2)
       ctx.fill()
       ctx.restore()
     }
@@ -380,7 +409,14 @@ export function useDandelionPhysics(
 
   function updateIdlePhysics(time: number, dt: number): void {
     const head = getHead()
-    const wind = computeMouseWind(mouse ?? head, head, 280, 2.8)
+    const mouseVec = mouse ?? head
+    const headDist = Math.hypot(mouseVec.x - head.x, mouseVec.y - head.y)
+    const hoverRadius = 320
+    const hoverPull = headDist < hoverRadius ? Math.pow(1 - headDist / hoverRadius, 1.65) : 0
+    const gustNoise = sharedPerlin.fbm(head.x * 0.002 + time * 0.00008, head.y * 0.002, 3)
+    const gustPulse = 0.45 + Math.max(0, Math.sin(time * 0.0021 + gustNoise * Math.PI * 2))
+    const gustWind = computeMouseWind(mouseVec, head, hoverRadius, 1.6 + hoverPull * 1.5, gustPulse)
+    const ambientHead = sharedPerlin.sampleWindField(head.x, head.y, time, 0.0017, 4)
 
     engine!.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
@@ -388,19 +424,19 @@ export function useDandelionPhysics(
       if (i <= headEngineId) {
         const nodeFactor = i / (STEM_NODES - 1)
         const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.002, 4)
-        const forceScale = dt * 0.0045
+        const forceScale = dt * 0.0042
         return {
-          x: (wind.x * nodeFactor * 1.3 + ambient.x * 0.14 * nodeFactor) * forceScale,
-          y: (wind.y * nodeFactor * 0.85 + ambient.y * 0.08 * nodeFactor) * forceScale,
+          x: (gustWind.x * nodeFactor * 1.3 + ambient.x * 0.14 * nodeFactor + ambientHead.x * hoverPull * 0.08) * forceScale,
+          y: (gustWind.y * nodeFactor * 0.85 + ambient.y * 0.08 * nodeFactor + ambientHead.y * hoverPull * 0.05) * forceScale,
         }
       }
 
       const fluffWind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
-      const fluffMouse = computeMouseWind(mouse ?? head, p, 200, 1.2)
-      const forceScale = dt * 0.0035
+      const fluffMouse = computeMouseWind(mouseVec, p, 240, 1.1 + hoverPull * 1.9, gustPulse)
+      const forceScale = dt * 0.0038
       return {
-        x: (fluffWind.x * 0.35 + fluffMouse.x) * forceScale,
-        y: (fluffWind.y * 0.2 + fluffMouse.y) * forceScale,
+        x: (fluffWind.x * 0.38 + fluffMouse.x) * forceScale,
+        y: (fluffWind.y * 0.22 + fluffMouse.y) * forceScale,
       }
     })
   }
@@ -436,12 +472,15 @@ export function useDandelionPhysics(
     for (const seed of seeds) {
       if (!seed.detached) continue
 
-      const wind = sharedPerlin.sampleWindField(seed.x, seed.y, time, 0.004, 4)
-      const turb = sharedPerlin.fbm(seed.x * 0.008, seed.y * 0.008 + time * 0.0003, 2)
-      const windForce = 2.2 + turb * 0.8
+      seed.warmup = Math.min(1, seed.warmup + dt * 0.0035)
+      const swirl = sharedPerlin.fbm(seed.x * 0.01, seed.y * 0.01 + time * 0.00025, 3)
+      const gustPulse = 0.4 + Math.max(0, Math.sin(time * 0.0024 + seed.offsetX * 0.12 + seed.layer))
+      const gust = 1 + gustPulse * 1.5 + swirl * 0.85
+      const drift = 0.7 + seed.warmup * 2.1
+      const inertia = 1 - Math.min(0.75, (1 - Math.min(seed.distFromCenter / 36, 1)) * 0.55)
 
-      seed.vx += (wind.x * windForce) / seed.mass
-      seed.vy += (wind.y * windForce - 0.07) / seed.mass
+      seed.vx += ((Math.sin(time * 0.004 + seed.offsetX) * 0.18 + gust * 0.1) * drift) / (seed.mass * inertia)
+      seed.vy += ((Math.cos(time * 0.003 + seed.offsetY) * 0.1 - 0.04 + gust * 0.03) * drift) / (seed.mass * inertia)
       seed.vx *= seed.friction
       seed.vy *= seed.friction
       seed.x += seed.vx * dtSec
@@ -451,16 +490,48 @@ export function useDandelionPhysics(
 
   function updateBlowingPhysics(time: number, dt: number): void {
     const head = getHead()
+    const gustNoise = sharedPerlin.fbm(head.x * 0.002 + time * 0.00012, head.y * 0.002, 4)
+    const gustPulse = 0.55 + Math.max(0, Math.sin(time * 0.0028 + gustNoise * Math.PI * 2))
     const sway = sharedPerlin.sampleWindField(head.x, head.y, time, 0.0025, 3)
     const forceScale = dt * 0.003
     engine!.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
       if (i <= headEngineId) {
         const f = i / headEngineId
-        return { x: sway.x * 0.5 * f * forceScale, y: sway.y * 0.25 * f * forceScale }
+        return {
+          x: sway.x * (0.4 + gustPulse * 0.8) * f * forceScale,
+          y: sway.y * (0.2 + gustPulse * 0.65) * f * forceScale,
+        }
       }
       return { x: 0, y: 0 }
     })
+
+    for (const seed of seeds) {
+      if (!seed.detached) {
+        const dx = mouse ? mouse.x - seed.x : head.x - seed.x
+        const dy = mouse ? mouse.y - seed.y : head.y - seed.y
+        const dist = Math.hypot(dx, dy)
+        const radius = 250
+        if (dist < radius) {
+          const influence = Math.pow(1 - dist / radius, 1.45)
+          const layerDelay = [0.6, 0.35, 0.18][seed.layer] ?? 0.3
+          const layerBoost = [0.65, 0.9, 1.2][seed.layer] ?? 0.85
+          const warmTarget = Math.max(0, influence * layerBoost - layerDelay * 0.2)
+          seed.warmup += (warmTarget - seed.warmup) * Math.min(1, dt * 0.0025)
+          const repulse = (0.12 + layerBoost * 0.14) * influence * dt * 0.0016
+          seed.vx += (dx / (dist || 1)) * repulse
+          seed.vy += (dy / (dist || 1)) * repulse * 0.7
+        } else {
+          seed.warmup = Math.max(0, seed.warmup - dt * (0.00055 + seed.layer * 0.00012))
+        }
+
+        const detachThreshold = [0.72, 0.48, 0.22][seed.layer] ?? 0.5
+        if (seed.warmup >= detachThreshold) {
+          seed.detached = true
+        }
+      }
+    }
+
     updateDetachedSeeds(time, dt)
   }
 
@@ -510,7 +581,19 @@ export function useDandelionPhysics(
       }
 
       const seedAlpha = phase.value === 'fading' ? fadeOpacity.value : 1
-      drawFluffSeed(ctx, sx, sy, svx, svy, seed.bristles, seed.distFromCenter, seedAlpha)
+      drawFluffSeed(
+        ctx,
+        sx,
+        sy,
+        svx,
+        svy,
+        seed.bristles,
+        seed.distFromCenter,
+        seedAlpha,
+        seed.angleJitter,
+        seed.warmup,
+        seed.layer,
+      )
     }
   }
 
@@ -589,6 +672,37 @@ export function useDandelionPhysics(
 
     prevMouse = { x, y }
     mouse = { x, y }
+
+    if (phase.value !== 'idle' || !engine) return
+
+    const head = getHead()
+    const dx = x - head.x
+    const dy = y - head.y
+    const dist = Math.hypot(dx, dy)
+    const enterRadius = 310
+
+    if (dist < enterRadius) {
+      const speed = Math.hypot(e.movementX, e.movementY)
+      const intensity = Math.min(1, Math.max(0.18, speed / 18))
+      const proximity = Math.pow(1 - dist / enterRadius, 1.2)
+      const triggerAmount = intensity * proximity
+
+      for (const seed of seeds) {
+        if (seed.detached) continue
+        const sx = seed.x - x
+        const sy = seed.y - y
+        const sDist = Math.hypot(sx, sy)
+        const seedRadius = 140
+        if (sDist < seedRadius) {
+          const warm = Math.max(0, 1 - sDist / seedRadius)
+          const layerBoost = [0.7, 0.95, 1.2][seed.layer] ?? 0.85
+          seed.warmup = Math.min(1, seed.warmup + warm * triggerAmount * layerBoost * 0.08)
+          const push = triggerAmount * warm * (0.45 + speed / 25) * layerBoost
+          seed.vx += (sx / (sDist || 1)) * push * 0.4
+          seed.vy += (sy / (sDist || 1)) * push * 0.25 - push * 0.08
+        }
+      }
+    }
   }
 
   function onPointerLeave(): void {
@@ -596,14 +710,26 @@ export function useDandelionPhysics(
     prevMouse = null
   }
 
-  function triggerBlow(): void {
+  function triggerBlow(originX?: number, originY?: number): void {
     if (phase.value !== 'idle' || !engine) return
     phase.value = 'blowing'
     blowStartTime = performance.now()
     detachSeeds()
+
+    if (originX !== undefined && originY !== undefined) {
+      for (const seed of seeds) {
+        const dx = seed.x - originX
+        const dy = seed.y - originY
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1
+        const push = Math.max(0, 1 - dist / 220)
+        seed.vx += (dx / dist) * push * 4.5
+        seed.vy += (dy / dist) * push * 2.5 - push * 0.8
+      }
+    }
   }
 
   function onClick(): void {
+    // retained for external compatibility
     triggerBlow()
   }
 

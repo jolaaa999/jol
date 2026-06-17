@@ -63,7 +63,7 @@ async function bootstrap(): Promise<void> {
 
     const picked = pickRandomPoem(articles)
     poemTitle.value = picked.title
-    const layout = buildPoemLayout(picked, 2 + Math.floor(Math.random() * 2))
+    const layout = buildPoemLayout(picked, 1 + Math.floor(Math.random() * 2))
 
     const allChars =
       layout.slots.map((s) => s.char).join('') +

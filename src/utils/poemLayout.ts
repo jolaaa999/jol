@@ -34,7 +34,7 @@ export function buildPoemLayout(
     .filter((s) => !PUNCT.has(s.char) && s.char.trim())
     .map((s) => s.globalIndex)
 
-  const count = Math.min(blankCount, Math.max(2, Math.floor(candidates.length * 0.2)))
+  const count = Math.min(blankCount, candidates.length)
   const shuffled = [...candidates].sort(() => Math.random() - 0.5)
   const blankIndices = new Set(shuffled.slice(0, count))
 

@@ -1,28 +1,20 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAtmosphereRenderer } from '@/composables/useAtmosphereRenderer'
-import { useGrassRenderer } from '@/composables/useGrassRenderer'
 import { useDandelionPhysics } from '@/composables/useDandelionPhysics'
 import PoemUnlock from '@/components/PoemUnlock.vue'
 
-const skyCanvasRef = ref<HTMLCanvasElement | null>(null)
-const grassCanvasRef = ref<HTMLCanvasElement | null>(null)
 const dandelionCanvasRef = ref<HTMLCanvasElement | null>(null)
 const router = useRouter()
 const showUnlock = ref(false)
 
-useAtmosphereRenderer(skyCanvasRef)
-
-const { phase, fadeOpacity, focusPoint, onClick } = useDandelionPhysics(dandelionCanvasRef, {
+const { phase, fadeOpacity, onPointerMove, onPointerLeave } = useDandelionPhysics(dandelionCanvasRef, {
   blowDuration: 1500,
   fadeDuration: 600,
   onTransitionComplete: () => {
     showUnlock.value = true
   },
 })
-
-useGrassRenderer(grassCanvasRef, focusPoint)
 
 function onUnlockComplete(): void {
   router.push('/blog')
@@ -36,13 +28,12 @@ const overlayOpacity = computed(() =>
 
 <template>
   <div class="landing">
-    <canvas ref="skyCanvasRef" class="layer layer-sky" aria-hidden="true" />
-    <canvas ref="grassCanvasRef" class="layer layer-grass" aria-hidden="true" />
     <canvas
       ref="dandelionCanvasRef"
       class="layer layer-dandelion"
-      aria-label="交互式蒲公英，点击吹散"
-      @click="onClick"
+      aria-label="交互式蒲公英，鼠标划过会吹散"
+      @pointermove="onPointerMove"
+      @pointerleave="onPointerLeave"
     />
 
     <div
@@ -53,7 +44,7 @@ const overlayOpacity = computed(() =>
 
     <Transition name="hint">
       <p v-if="showHint" class="hint industrial-label">
-        点击屏幕 · 吹散蒲公英
+        鼠标划过 · 吹散蒲公英
       </p>
     </Transition>
 
@@ -69,7 +60,10 @@ const overlayOpacity = computed(() =>
   overflow: hidden;
   cursor: crosshair;
   user-select: none;
-  background: #0a1628;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 50% 68%, rgba(255, 214, 160, 0.04), transparent 35%),
+    #071018;
 }
 
 .layer {
@@ -85,19 +79,11 @@ const overlayOpacity = computed(() =>
   pointer-events: auto;
 }
 
-.layer-grass {
-  z-index: 5;
-}
-
-.layer-sky {
-  z-index: 0;
-}
-
 .transition-overlay {
   position: absolute;
   inset: 0;
   z-index: 20;
-  background: var(--color-bg);
+  background: #071018;
   pointer-events: none;
   transition: opacity 0.05s linear;
 }

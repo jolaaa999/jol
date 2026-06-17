@@ -20,16 +20,22 @@ interface TypefaceJson {
   original_font_information: Record<string, string>
 }
 
-const FONT_CANDIDATES = [
-  '/fonts/poem.typeface.json',
-  'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json',
-]
+const FONT_CANDIDATES = ['/fonts/poem.typeface.json']
 
 const OTF_URL =
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf'
 
 let cachedFont: Font | null = null
-let cachedChars = ''
+let cachedGlyphSet = new Set<string>()
+
+export function fontHasChar(font: Font, char: string): boolean {
+  const glyphs = (font as unknown as { data?: { glyphs?: Record<string, unknown> } }).data?.glyphs
+  return Boolean(glyphs && char in glyphs)
+}
+
+function fontHasAllChars(font: Font, chars: string): boolean {
+  return [...chars].every((c) => !c.trim() || fontHasChar(font, c))
+}
 
 function flipY(y: number, ascender: number): number {
   return ascender - y
@@ -132,22 +138,25 @@ async function loadJsonFont(url: string): Promise<Font | null> {
  * 加载支持中文的 Font — 优先本地 JSON，回退 opentype 动态子集
  */
 export async function loadChineseFont(requiredChars: string): Promise<Font> {
-  const chars = [...new Set(requiredChars.split(''))].join('')
-  if (cachedFont && cachedChars.includes(chars)) return cachedFont
+  const chars = [...new Set((requiredChars + '□').split(''))].filter(Boolean).join('')
+
+  if (cachedFont && [...chars].every((c) => cachedGlyphSet.has(c))) {
+    return cachedFont
+  }
 
   for (const url of FONT_CANDIDATES) {
     const font = await loadJsonFont(url)
-    if (font) {
+    if (font && fontHasAllChars(font, chars)) {
       cachedFont = font
-      cachedChars = chars
+      cachedGlyphSet = new Set(chars.split(''))
       return font
     }
   }
 
   const otFont = await loadOpentypeFont()
-  const typeface = buildTypefaceFromOpentype(otFont, chars + '□')
+  const typeface = buildTypefaceFromOpentype(otFont, chars)
   const loader = new FontLoader()
   cachedFont = loader.parse(typeface)
-  cachedChars = chars
+  cachedGlyphSet = new Set(chars.split(''))
   return cachedFont
 }
