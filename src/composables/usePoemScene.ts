@@ -128,10 +128,12 @@ export function usePoemScene(
     char: string,
     material: THREE.Material,
   ): THREE.Mesh {
-    if (!fontHasChar(font, char)) {
-      throw new Error(`Font missing glyph: ${char}`)
-    }
-    const geo = new TextGeometry(char, {
+    const renderChar = fontHasChar(font, char)
+      ? char
+      : fontHasChar(font, '□')
+        ? '□'
+        : '?'
+    const geo = new TextGeometry(renderChar, {
       font,
       size: CHAR_SIZE,
       depth: CHAR_DEPTH,
