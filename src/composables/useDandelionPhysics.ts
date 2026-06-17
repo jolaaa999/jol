@@ -752,6 +752,8 @@ export function useDandelionPhysics(
     fadeOpacity,
     focusPoint,
     triggerBlow,
+    onPointerMove,
+    onPointerLeave,
     onClick,
   }
 }
