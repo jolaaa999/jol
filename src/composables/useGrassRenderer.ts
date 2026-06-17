@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
 import { sharedPerlin } from '@/utils/perlinNoise'
+import { getLandingLayout } from '@/composables/landingLayout'
 
 export interface GrassLayerConfig {
   blur: number
@@ -22,9 +23,9 @@ interface GrassBlade {
 }
 
 const LAYERS: GrassLayerConfig[] = [
-  { blur: 5, density: 0.55, minHeight: 18, maxHeight: 42, baseYRatio: 0.58, opacity: 0.55 },
-  { blur: 2.5, density: 0.75, minHeight: 32, maxHeight: 72, baseYRatio: 0.62, opacity: 0.78 },
-  { blur: 0, density: 1, minHeight: 48, maxHeight: 110, baseYRatio: 0.66, opacity: 1 },
+  { blur: 5, density: 0.55, minHeight: 36, maxHeight: 80, baseYRatio: 1, opacity: 0.55 },
+  { blur: 2.5, density: 0.75, minHeight: 56, maxHeight: 120, baseYRatio: 1, opacity: 0.78 },
+  { blur: 0, density: 1, minHeight: 72, maxHeight: 150, baseYRatio: 1, opacity: 1 },
 ]
 
 /** 太阳方向 — 屏幕左上角 */
@@ -32,16 +33,17 @@ const SUN_DIR = { x: -0.85, y: -0.52 }
 
 function buildBlades(width: number, height: number): GrassBlade[] {
   const blades: GrassBlade[] = []
+  const { groundY } = getLandingLayout(width, height)
 
   for (let layer = 0; layer < LAYERS.length; layer++) {
     const cfg = LAYERS[layer]
     const count = Math.floor(width * cfg.density * (layer === 2 ? 1.4 : 1))
-    const baseY = height * cfg.baseYRatio
+    const baseY = groundY - layer * 2
 
     for (let i = 0; i < count; i++) {
       blades.push({
         x: (i / count) * width + (Math.random() - 0.5) * (width / count) * 1.2,
-        baseY: baseY + (Math.random() - 0.5) * height * 0.04,
+        baseY: baseY + (Math.random() - 0.5) * 3,
         height: cfg.minHeight + Math.random() * (cfg.maxHeight - cfg.minHeight),
         width: 1.2 + Math.random() * (layer === 2 ? 2.2 : 1.4),
         lean: (Math.random() - 0.5) * 0.35,
@@ -149,11 +151,11 @@ export function useGrassRenderer(
       ctx.restore()
     }
 
-    const groundAo = ctx.createLinearGradient(0, h * 0.52, 0, h)
+    const groundAo = ctx.createLinearGradient(0, h * 0.72, 0, h)
     groundAo.addColorStop(0, 'rgba(6, 16, 8, 0)')
-    groundAo.addColorStop(1, 'rgba(4, 10, 5, 0.42)')
+    groundAo.addColorStop(1, 'rgba(4, 10, 5, 0.5)')
     ctx.fillStyle = groundAo
-    ctx.fillRect(0, h * 0.52, w, h * 0.48)
+    ctx.fillRect(0, h * 0.72, w, h * 0.28)
 
     rafId = requestAnimationFrame(render)
   }

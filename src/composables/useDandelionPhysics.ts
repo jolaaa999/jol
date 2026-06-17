@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { PhysicsEngine, type Particle, type Vec2 } from './usePhysicsEngine'
 import { sharedPerlin } from '@/utils/perlinNoise'
+import { getLandingLayout } from '@/composables/landingLayout'
 
 // ─── 类型 ───────────────────────────────────────────────────────────────────
 
@@ -143,10 +144,10 @@ function drawFluffSeed(
     const ey = y + Math.sin(angle) * bristle.length
     const lit = 0.5 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.25
 
-    ctx.strokeStyle = `rgba(${Math.floor(235 + lit * 20)}, ${Math.floor(238 + lit * 15)}, ${Math.floor(240 + lit * 10)}, ${0.35 + lit * 0.45})`
-    ctx.lineWidth = bristle.thickness
-    ctx.shadowBlur = 2.5
-    ctx.shadowColor = 'rgba(255, 255, 255, 0.35)'
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 + lit * 0.4})`
+    ctx.lineWidth = bristle.thickness + 0.25
+    ctx.shadowBlur = 3
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.55)'
     ctx.beginPath()
     ctx.moveTo(x, y)
     ctx.lineTo(ex, ey)
@@ -154,9 +155,9 @@ function drawFluffSeed(
   }
 
   ctx.shadowBlur = 0
-  ctx.fillStyle = `rgba(255, 252, 248, ${0.65 + edgeFade * 0.3})`
+  ctx.fillStyle = `rgba(255, 255, 255, ${0.8 + edgeFade * 0.2})`
   ctx.beginPath()
-  ctx.arc(x, y, 0.7 + edgeFade * 0.4, 0, Math.PI * 2)
+  ctx.arc(x, y, 1 + edgeFade * 0.5, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -171,12 +172,12 @@ function drawHead(
   const lx = x + SUN.x * radius * 0.6
   const ly = y + SUN.y * radius * 0.6
   const g = ctx.createRadialGradient(lx, ly, 0, x, y, radius * 1.4)
-  g.addColorStop(0, 'rgba(255, 255, 252, 0.92)')
-  g.addColorStop(0.45, 'rgba(245, 243, 235, 0.55)')
-  g.addColorStop(1, 'rgba(180, 178, 170, 0.08)')
+  g.addColorStop(0, 'rgba(255, 255, 255, 0.98)')
+  g.addColorStop(0.45, 'rgba(250, 248, 240, 0.75)')
+  g.addColorStop(1, 'rgba(200, 198, 190, 0.15)')
   ctx.fillStyle = g
-  ctx.shadowBlur = 6
-  ctx.shadowColor = 'rgba(255, 255, 240, 0.25)'
+  ctx.shadowBlur = 10
+  ctx.shadowColor = 'rgba(255, 255, 255, 0.45)'
   ctx.beginPath()
   ctx.arc(x, y, radius, 0, Math.PI * 2)
   ctx.fill()
@@ -211,7 +212,10 @@ export function useDandelionPhysics(
   const phase = ref<DandelionPhase>('idle')
   const fadeOpacity = ref(1)
 
-  const focusPoint = ref({ x: 0, y: 0 })
+  const focusPoint = ref({
+    x: typeof window !== 'undefined' ? window.innerWidth * 0.5 : 0,
+    y: typeof window !== 'undefined' ? window.innerHeight * 0.4 : 0,
+  })
   let engine: PhysicsEngine | null = null
   let seeds: FluffSeed[] = []
   let trails: WindTrail[] = []
@@ -238,12 +242,11 @@ export function useDandelionPhysics(
       substeps: 5,
     })
 
-    const cx = width * 0.5
-    const groundY = height * 0.68
+    const { cx, groundY, headY } = getLandingLayout(width, height)
     rootPos = { x: cx, y: groundY }
     headEngineId = STEM_NODES - 1
 
-    const segLen = (groundY - height * 0.28) / (STEM_NODES - 1)
+    const segLen = (groundY - headY) / (STEM_NODES - 1)
 
     for (let i = 0; i < STEM_NODES; i++) {
       const y = groundY - i * segLen
@@ -270,7 +273,7 @@ export function useDandelionPhysics(
     }
 
     seeds = []
-    const headY = groundY - (STEM_NODES - 1) * segLen
+    const seedAnchorY = groundY - (STEM_NODES - 1) * segLen
 
     for (let i = 0; i < SEED_COUNT; i++) {
       const angle = (i / SEED_COUNT) * Math.PI * 2 + Math.random() * 0.15
@@ -278,7 +281,7 @@ export function useDandelionPhysics(
       const ox = Math.cos(angle) * dist
       const oy = Math.sin(angle) * dist * 0.62
       const sx = cx + ox
-      const sy = headY + oy
+      const sy = seedAnchorY + oy
 
       const bristleCount = 2 + Math.floor(Math.random() * 3)
       const bristles: PappusBristle[] = []
@@ -327,7 +330,7 @@ export function useDandelionPhysics(
       })
     }
 
-    focusPoint.value = { x: cx, y: headY }
+    focusPoint.value = { x: cx, y: seedAnchorY }
   }
 
   // ── 风迹粒子 ──
@@ -484,7 +487,7 @@ export function useDandelionPhysics(
       : 1
 
     if (phase.value === 'idle' || phase.value === 'blowing') {
-      drawHead(ctx, head.x, head.y, 11 * headAlpha)
+      drawHead(ctx, head.x, head.y, 14 * headAlpha)
     }
 
     for (const seed of seeds) {
@@ -519,7 +522,7 @@ export function useDandelionPhysics(
     lastTimestamp = timestamp
 
     const canvas = canvasRef.value
-    if (!canvas || !engine) {
+    if (!canvas) {
       rafId = requestAnimationFrame(tick)
       return
     }
@@ -534,11 +537,16 @@ export function useDandelionPhysics(
     const w = canvas.clientWidth
     const h = canvas.clientHeight
 
-    if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+    if (w > 0 && h > 0 && (!engine || canvas.width !== w * dpr || canvas.height !== h * dpr)) {
       canvas.width = w * dpr
       canvas.height = h * dpr
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
       buildScene(w, h)
+    }
+
+    if (!engine) {
+      rafId = requestAnimationFrame(tick)
+      return
     }
 
     updateTrails(dt)
