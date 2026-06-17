@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import GlassCard from '@/components/ui/GlassCard.vue'
 
 export interface BlogEntry {
@@ -34,24 +34,31 @@ const reflectionEntries = ref<BlogEntry[]>([
   {
     id: 'r-001',
     title: '关于克制',
-    excerpt: '好的界面像好的诗——每个元素都有存在的理由，其余皆是噪声。',
+    excerpt: '好的界面像好的诗。每一个元素都有存在的理由，其余皆是噪声。',
     date: '2026-06-01',
   },
   {
     id: 'r-002',
     title: '物理与感知',
-    excerpt: 'Verlet 积分教会我：平滑的动画不是插值出来的，而是被力推导出来的。',
+    excerpt: 'Verlet 积分教会我，平滑的动画不是插值出来的，而是被力推导出来的。',
     date: '2026-05-20',
   },
   {
     id: 'r-003',
-    title: '终末地的灰',
+    title: '终末地的灯',
     excerpt: '暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。',
     date: '2026-05-08',
   },
 ])
 
 const streamStatus = ref<'loading' | 'ready' | 'offline'>('loading')
+
+const featuredEntry = computed(() => reflectionEntries.value[0] ?? poetryEntries.value[0])
+const totalEntries = computed(() => poetryEntries.value.length + reflectionEntries.value.length)
+const latestDate = computed(() => {
+  const dates = [...poetryEntries.value, ...reflectionEntries.value].map((entry) => entry.date).sort().reverse()
+  return dates[0] ?? '--'
+})
 
 interface ArticleResponse {
   data: Array<{
@@ -69,7 +76,7 @@ function toEntry(article: ArticleResponse['data'][number]): BlogEntry {
   return {
     id: article.id,
     title: article.title,
-    excerpt: article.content.replace(/\n/g, ' ').slice(0, 80),
+    excerpt: article.content.replace(/\n/g, ' ').slice(0, 96),
     date: article.created_at.slice(0, 10),
   }
 }
@@ -99,72 +106,74 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="blog-layout">
-    <div class="topology-bg" aria-hidden="true">
-      <svg class="topology-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-        <defs>
-          <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
-            <path
-              d="M 64 0 L 0 0 0 64"
-              fill="none"
-              stroke="rgba(255,255,255,0.025)"
-              stroke-width="0.5"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-        <circle cx="20%" cy="25%" r="280" fill="rgba(0,212,170,0.03)" />
-        <circle cx="85%" cy="70%" r="200" fill="rgba(255,107,44,0.025)" />
-        <path
-          d="M0,400 Q360,320 720,380 T1440,340"
-          fill="none"
-          stroke="rgba(255,255,255,0.04)"
-          stroke-width="1"
-        />
-        <path
-          d="M0,600 Q480,520 960,560 T1440,500"
-          fill="none"
-          stroke="rgba(255,255,255,0.03)"
-          stroke-width="0.75"
-        />
-      </svg>
-    </div>
+  <main class="blog-layout">
+    <div class="ambient-grid" aria-hidden="true" />
+    <div class="ambient-lines" aria-hidden="true" />
 
-    <div class="blog-grid">
-      <!-- 页眉 -->
-      <header class="grid-header">
-        <GlassCard title="数据流面板" code="SYS" tag="Endfield / Panel">
-          <div class="panel-intro">
-            <p class="intro-lead">
-              记录<span class="intro-accent">诗文</span>与<span class="intro-accent-alt">有感</span>
-            </p>
-            <p class="intro-body">
-              非对称网格布局 · 毛玻璃数据卡片 · 工业级排版克制
-            </p>
-          </div>
-          <template #footer>
-            <div class="status-bar">
+    <div class="blog-shell">
+      <section class="hero-panel" aria-labelledby="blog-title">
+        <div class="hero-copy">
+          <p class="eyebrow industrial-label">Journal Operating Layer</p>
+          <h1 id="blog-title" class="hero-title">
+            在光和噪声之间，记录一些正在成形的想法。
+          </h1>
+          <p class="hero-text">
+            这里收纳诗文、界面笔记和一些关于感知的短篇。它不追求喧哗，更像一张夜间工作台，留下可被再次点亮的线索。
+          </p>
+        </div>
+
+        <div class="hero-readout" aria-label="博客状态">
+          <div class="readout-row">
+            <span class="readout-label">status</span>
+            <span class="readout-value">
               <span class="status-dot" :class="streamStatus" />
-              <span class="status-text">
-                {{ streamStatus === 'ready' ? 'stream synced' : streamStatus === 'loading' ? 'syncing…' : 'local cache' }}
-              </span>
+              {{ streamStatus === 'ready' ? 'synced' : streamStatus === 'loading' ? 'syncing' : 'local' }}
+            </span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-label">entries</span>
+            <span class="readout-value">{{ totalEntries }}</span>
+          </div>
+          <div class="readout-row">
+            <span class="readout-label">latest</span>
+            <span class="readout-value">{{ latestDate }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="feature-strip" aria-label="精选文章">
+        <GlassCard title="精选" code="00" tag="Featured Signal">
+          <button type="button" class="featured-link">
+            <span class="featured-kicker industrial-label">{{ featuredEntry?.date }}</span>
+            <span class="featured-title">{{ featuredEntry?.title }}</span>
+            <span class="featured-excerpt">{{ featuredEntry?.excerpt }}</span>
+          </button>
+          <template #footer>
+            <div class="signal-meter" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
             </div>
           </template>
         </GlassCard>
-      </header>
+      </section>
 
-      <!-- 诗文 -->
-      <section id="poetry" class="grid-poetry">
+      <section id="poetry" class="entry-section poetry-section">
         <GlassCard title="诗文" code="01" tag="Poetry Stream">
           <ul class="entry-list">
-            <li v-for="entry in poetryEntries" :key="entry.id" class="entry-item">
+            <li v-for="(entry, index) in poetryEntries" :key="entry.id" class="entry-item">
               <button type="button" class="entry-link">
-                <div class="entry-meta">
-                  <time class="entry-date">{{ entry.date }}</time>
-                  <span class="entry-id">{{ entry.id }}</span>
-                </div>
-                <h3 class="entry-title">{{ entry.title }}</h3>
-                <p class="entry-excerpt">{{ entry.excerpt }}</p>
+                <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                <span class="entry-content">
+                  <span class="entry-meta">
+                    <time class="entry-date">{{ entry.date }}</time>
+                    <span class="entry-id">{{ entry.id }}</span>
+                  </span>
+                  <span class="entry-title">{{ entry.title }}</span>
+                  <span class="entry-excerpt">{{ entry.excerpt }}</span>
+                </span>
               </button>
             </li>
           </ul>
@@ -174,18 +183,20 @@ onMounted(async () => {
         </GlassCard>
       </section>
 
-      <!-- 有感 -->
-      <section id="reflections" class="grid-reflections">
+      <section id="reflections" class="entry-section reflections-section">
         <GlassCard title="有感" code="02" tag="Reflection Stream">
           <ul class="entry-list">
-            <li v-for="entry in reflectionEntries" :key="entry.id" class="entry-item">
+            <li v-for="(entry, index) in reflectionEntries" :key="entry.id" class="entry-item">
               <button type="button" class="entry-link">
-                <div class="entry-meta">
-                  <time class="entry-date">{{ entry.date }}</time>
-                  <span class="entry-id">{{ entry.id }}</span>
-                </div>
-                <h3 class="entry-title">{{ entry.title }}</h3>
-                <p class="entry-excerpt">{{ entry.excerpt }}</p>
+                <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                <span class="entry-content">
+                  <span class="entry-meta">
+                    <time class="entry-date">{{ entry.date }}</time>
+                    <span class="entry-id">{{ entry.id }}</span>
+                  </span>
+                  <span class="entry-title">{{ entry.title }}</span>
+                  <span class="entry-excerpt">{{ entry.excerpt }}</span>
+                </span>
               </button>
             </li>
           </ul>
@@ -195,135 +206,259 @@ onMounted(async () => {
         </GlassCard>
       </section>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
 .blog-layout {
   position: relative;
   min-height: calc(100dvh - var(--nav-height));
-  background-color: var(--color-endfield-bg);
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgba(0, 212, 170, 0.08), transparent 26%),
+    linear-gradient(245deg, rgba(255, 107, 44, 0.06), transparent 32%),
+    #08090b;
 }
 
-/* ── 拓扑背景 ── */
-.topology-bg {
+.ambient-grid,
+.ambient-lines {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  overflow: hidden;
 }
 
-.topology-svg {
-  width: 100%;
-  height: 100%;
-  opacity: 0.9;
+.ambient-grid {
+  opacity: 0.72;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(to bottom, black 0%, transparent 82%);
 }
 
-/* ── 非对称 Grid ── */
-.blog-grid {
+.ambient-lines {
+  opacity: 0.58;
+  background:
+    repeating-linear-gradient(
+      115deg,
+      transparent 0,
+      transparent 56px,
+      rgba(255, 255, 255, 0.035) 57px,
+      transparent 58px
+    );
+}
+
+.blog-shell {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 2fr 3fr;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 0.95fr);
   grid-template-areas:
-    'header header'
+    'hero feature'
     'poetry reflections';
-  gap: 1.25rem;
+  gap: 1rem;
   max-width: var(--content-max);
+  min-height: calc(100dvh - var(--nav-height));
   margin: 0 auto;
   padding: 2rem 1.5rem 3rem;
-  min-height: calc(100dvh - var(--nav-height));
 }
 
-.grid-header {
-  grid-area: header;
+.hero-panel {
+  grid-area: hero;
+  position: relative;
+  display: grid;
+  align-content: space-between;
+  min-height: 24rem;
+  padding: clamp(1.5rem, 4vw, 3rem);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.42));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 18px 60px rgba(0, 0, 0, 0.34);
+  overflow: hidden;
 }
 
-.grid-poetry {
-  grid-area: poetry;
+.hero-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.18), transparent),
+    linear-gradient(0deg, transparent 72%, rgba(255, 255, 255, 0.06));
+  clip-path: polygon(0 78%, 100% 47%, 100% 62%, 0 93%);
+  opacity: 0.7;
 }
 
-.grid-reflections {
-  grid-area: reflections;
+.hero-panel::after {
+  content: '';
+  position: absolute;
+  right: -8rem;
+  bottom: -7rem;
+  width: 26rem;
+  height: 16rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transform: rotate(-18deg);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 18px
+    );
 }
 
-/* ── 页眉内容 ── */
-.panel-intro {
-  padding: 0.25rem 1.5rem 0.5rem;
+.hero-copy,
+.hero-readout {
+  position: relative;
+  z-index: 1;
 }
 
-.intro-lead {
-  margin: 0 0 0.5rem;
-  font-size: clamp(1.5rem, 3vw, var(--text-xl));
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--color-foreground);
-}
-
-.intro-accent {
+.eyebrow {
+  margin: 0 0 1.5rem;
   color: var(--color-accent-cyan);
 }
 
-.intro-accent-alt {
-  color: var(--color-accent);
-}
-
-.intro-body {
+.hero-title {
+  max-width: 12em;
   margin: 0;
+  font-size: clamp(2.25rem, 6vw, 5.25rem);
+  line-height: 0.98;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: #f6f6f2;
+}
+
+.hero-text {
+  max-width: 38rem;
+  margin: 1.5rem 0 0;
   font-size: var(--text-base);
-  font-weight: 300;
-  letter-spacing: 0.03em;
-  line-height: 1.7;
-  color: var(--color-foreground-dim);
+  line-height: 1.9;
+  color: rgba(232, 232, 234, 0.72);
 }
 
-.status-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.hero-readout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 2.5rem;
 }
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-muted);
+.readout-row {
+  min-width: 0;
+  padding: 0.85rem 0.9rem;
+  border-left: 1px solid rgba(0, 212, 170, 0.45);
+  background: rgba(0, 0, 0, 0.2);
 }
 
-.status-dot.ready {
-  background: var(--color-accent-cyan);
-  box-shadow: 0 0 8px var(--color-accent-cyan-dim);
-}
-
-.status-dot.loading {
-  background: var(--color-accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.status-dot.offline {
-  background: var(--color-muted);
-}
-
-.status-text {
+.readout-label,
+.readout-value {
+  display: block;
   font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
+}
+
+.readout-label {
+  margin-bottom: 0.35rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
   color: var(--color-muted);
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
+.readout-value {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--color-foreground);
 }
 
-/* ── 条目列表 ── */
+.feature-strip {
+  grid-area: feature;
+  min-width: 0;
+}
+
+.feature-strip :deep(.glass-card) {
+  height: 100%;
+}
+
+.featured-link {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+  min-height: 17rem;
+  padding: 1.5rem;
+  color: inherit;
+  text-align: left;
+  background:
+    linear-gradient(150deg, rgba(0, 212, 170, 0.11), transparent 42%),
+    transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.featured-link:hover .featured-title,
+.entry-link:hover .entry-title {
+  color: var(--color-accent-cyan);
+}
+
+.featured-kicker {
+  color: var(--color-accent);
+}
+
+.featured-title {
+  max-width: 9em;
+  font-size: clamp(1.75rem, 3vw, 2.8rem);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: 0;
+  transition: color 0.35s var(--ease-mechanical);
+}
+
+.featured-excerpt {
+  align-self: end;
+  max-width: 30rem;
+  font-size: var(--text-base);
+  line-height: 1.8;
+  color: var(--color-foreground-dim);
+}
+
+.signal-meter {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.4rem;
+}
+
+.signal-meter span {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.signal-meter span:nth-child(2),
+.signal-meter span:nth-child(4) {
+  background: rgba(0, 212, 170, 0.72);
+}
+
+.poetry-section {
+  grid-area: poetry;
+}
+
+.reflections-section {
+  grid-area: reflections;
+}
+
+.entry-section {
+  min-width: 0;
+}
+
+.entry-section :deep(.glass-card) {
+  height: 100%;
+}
+
 .entry-list {
   list-style: none;
   margin: 0;
@@ -331,67 +466,79 @@ onMounted(async () => {
 }
 
 .entry-item + .entry-item {
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
 }
 
 .entry-link {
-  display: block;
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr);
+  gap: 1rem;
   width: 100%;
-  padding: 1.125rem 1.5rem;
-  background: none;
-  border: none;
+  padding: 1.15rem 1.5rem 1.25rem;
+  color: inherit;
   text-align: left;
+  background: transparent;
+  border: 0;
   cursor: pointer;
-  transition: background 0.35s var(--ease-mechanical);
+  transition:
+    background 0.35s var(--ease-mechanical),
+    transform 0.35s var(--ease-mechanical);
 }
 
 .entry-link:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.035);
+  transform: translateX(2px);
 }
 
-.entry-link:hover .entry-title {
-  color: var(--color-accent-cyan);
+.entry-index {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.26);
+}
+
+.entry-content,
+.entry-meta,
+.entry-title,
+.entry-excerpt {
+  display: block;
+  min-width: 0;
 }
 
 .entry-meta {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.375rem;
+  gap: 1rem;
+  margin-bottom: 0.45rem;
 }
 
-.entry-date {
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  color: var(--color-muted);
-}
-
+.entry-date,
 .entry-id {
   font-family: var(--font-mono);
-  font-size: 0.5625rem;
+  font-size: 0.62rem;
   letter-spacing: 0.1em;
-  color: rgba(255, 255, 255, 0.2);
+  color: var(--color-muted);
   text-transform: uppercase;
 }
 
+.entry-id {
+  color: rgba(255, 255, 255, 0.24);
+}
+
 .entry-title {
-  margin: 0 0 0.375rem;
-  font-size: var(--text-base);
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+  font-size: var(--text-lg);
+  line-height: 1.35;
+  font-weight: 750;
+  letter-spacing: 0;
   color: var(--color-foreground);
   transition: color 0.35s var(--ease-mechanical);
 }
 
 .entry-excerpt {
-  margin: 0;
   font-size: var(--text-sm);
-  font-weight: 300;
-  letter-spacing: 0.02em;
-  line-height: 1.65;
-  color: var(--color-foreground-dim);
+  line-height: 1.7;
+  color: rgba(232, 232, 234, 0.62);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -406,25 +553,80 @@ onMounted(async () => {
   text-transform: uppercase;
 }
 
-/* ── 响应式 ── */
-@media (max-width: 900px) {
-  .blog-grid {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'header'
-      'poetry'
-      'reflections';
+.status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+
+.status-dot.ready {
+  background: var(--color-accent-cyan);
+  box-shadow: 0 0 10px var(--color-accent-cyan-dim);
+}
+
+.status-dot.loading {
+  background: var(--color-accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.status-dot.offline {
+  background: var(--color-muted);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
   }
 }
 
-@media (max-width: 480px) {
-  .blog-grid {
-    padding: 1.25rem 1rem 2rem;
-    gap: 1rem;
+@media (max-width: 960px) {
+  .blog-shell {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'hero'
+      'feature'
+      'poetry'
+      'reflections';
+  }
+
+  .hero-panel {
+    min-height: 22rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .blog-shell {
+    padding: 1rem 0.85rem 2rem;
+  }
+
+  .hero-panel {
+    padding: 1.35rem;
+  }
+
+  .hero-readout {
+    grid-template-columns: 1fr;
+    margin-top: 2rem;
+  }
+
+  .featured-link {
+    min-height: 14rem;
+    padding: 1.25rem;
   }
 
   .entry-link {
-    padding: 1rem 1.25rem;
+    grid-template-columns: 2.35rem minmax(0, 1fr);
+    padding: 1rem 1.15rem;
+  }
+
+  .entry-meta {
+    display: grid;
+    gap: 0.25rem;
   }
 }
 </style>
