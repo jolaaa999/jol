@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { PhysicsEngine, type Particle, type Vec2 } from './usePhysicsEngine'
+import { sharedPerlin } from '@/utils/perlinNoise'
 
 // ─── 类型 ───────────────────────────────────────────────────────────────────
 
@@ -23,11 +24,15 @@ interface WindTrail {
   maxLife: number
 }
 
+interface PappusBristle {
+  angle: number
+  length: number
+  thickness: number
+}
+
 interface FluffSeed {
-  /** 相对于 head 的锚点偏移（idle）或世界坐标（blowing） */
   offsetX: number
   offsetY: number
-  /** 自由态物理 */
   x: number
   y: number
   prevX: number
@@ -36,71 +41,14 @@ interface FluffSeed {
   vy: number
   mass: number
   friction: number
-  bristleAngle: number
-  bristleLen: number
+  bristles: PappusBristle[]
   detached: boolean
   engineId: number
+  distFromCenter: number
 }
 
-// ─── Perlin 2D 噪音 ─────────────────────────────────────────────────────────
-
-class PerlinNoise2D {
-  private readonly perm: number[]
-
-  constructor(seed = 42) {
-    const p = Array.from({ length: 256 }, (_, i) => i)
-    let s = seed
-    for (let i = 255; i > 0; i--) {
-      s = (s * 16807 + 12345) & 0x7fffffff
-      const j = s % (i + 1)
-      ;[p[i], p[j]] = [p[j], p[i]]
-    }
-    this.perm = [...p, ...p]
-  }
-
-  private fade(t: number): number {
-    return t * t * t * (t * (t * 6 - 15) + 10)
-  }
-
-  private lerp(a: number, b: number, t: number): number {
-    return a + t * (b - a)
-  }
-
-  private grad(hash: number, x: number, y: number): number {
-    const h = hash & 3
-    const u = h < 2 ? x : y
-    const v = h < 2 ? y : x
-    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v)
-  }
-
-  /** 返回值范围约 [-1, 1] */
-  noise(x: number, y: number): number {
-    const xi = Math.floor(x) & 255
-    const yi = Math.floor(y) & 255
-    const xf = x - Math.floor(x)
-    const yf = y - Math.floor(y)
-    const u = this.fade(xf)
-    const v = this.fade(yf)
-    const aa = this.perm[this.perm[xi] + yi]
-    const ab = this.perm[this.perm[xi] + yi + 1]
-    const ba = this.perm[this.perm[xi + 1] + yi]
-    const bb = this.perm[this.perm[xi + 1] + yi + 1]
-    return this.lerp(
-      this.lerp(this.grad(aa, xf, yf), this.grad(ba, xf - 1, yf), u),
-      this.lerp(this.grad(ab, xf, yf - 1), this.grad(bb, xf - 1, yf - 1), u),
-      v,
-    )
-  }
-
-  /** 返回 2D 风向量 */
-  sampleField(x: number, y: number, time: number, scale = 0.004): Vec2 {
-    const nx = x * scale
-    const ny = y * scale + time * 0.0004
-    const angle = this.noise(nx, ny) * Math.PI * 2
-    const mag = 0.5 + this.noise(nx + 100, ny + 100) * 0.5
-    return { x: Math.cos(angle) * mag, y: Math.sin(angle) * mag * 0.6 }
-  }
-}
+/** 全局光源 — 屏幕左上角 */
+const SUN = { x: -0.78, y: -0.62, intensity: 1.15 }
 
 // ─── 风力计算 ─────────────────────────────────────────────────────────────────
 
@@ -143,17 +91,28 @@ function drawStem(
     const a = nodes[i]
     const b = nodes[i + 1]
     const t = i / (nodes.length - 2)
-    const width = 4.5 - t * 2.2
+    const width = 4.8 - t * 2.4
+
+    const midX = (a.x + b.x) / 2
+    const midY = (a.y + b.y) / 2
+    const nx = -(b.y - a.y)
+    const ny = b.x - a.x
+    const nLen = Math.sqrt(nx * nx + ny * ny) || 1
+    const litSide = (nx / nLen) * SUN.x + (ny / nLen) * SUN.y
+    const shade = 0.55 + litSide * 0.35 * SUN.intensity
 
     ctx.beginPath()
     ctx.moveTo(a.x, a.y)
-    const cpx = (a.x + b.x) / 2 + (b.y - a.y) * 0.04
-    const cpy = (a.y + b.y) / 2 - (b.x - a.x) * 0.04
+    const cpx = midX + (b.y - a.y) * 0.035
+    const cpy = midY - (b.x - a.x) * 0.035
     ctx.quadraticCurveTo(cpx, cpy, b.x, b.y)
 
     const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y)
-    g.addColorStop(0, `rgba(${40 + t * 20}, ${90 + t * 10}, ${35}, 0.95)`)
-    g.addColorStop(1, `rgba(${55 + t * 15}, ${110 + t * 5}, ${45}, 0.9)`)
+    const r = Math.floor(28 + shade * 22 + t * 8)
+    const gv = Math.floor(72 + shade * 38 + t * 12)
+    const gb = Math.floor(28 + shade * 14)
+    g.addColorStop(0, `rgba(${r}, ${gv}, ${gb}, 0.96)`)
+    g.addColorStop(1, `rgba(${r + 12}, ${gv + 8}, ${gb + 6}, 0.92)`)
     ctx.strokeStyle = g
     ctx.lineWidth = width
     ctx.stroke()
@@ -167,28 +126,37 @@ function drawFluffSeed(
   y: number,
   vx: number,
   vy: number,
-  angle: number,
-  bristleLen: number,
+  bristles: PappusBristle[],
+  distFromCenter: number,
   alpha: number,
 ): void {
   const speed = Math.sqrt(vx * vx + vy * vy)
-  const dirAngle = speed > 0.1 ? Math.atan2(vy, vx) : angle
+  const motionAngle = speed > 0.08 ? Math.atan2(vy, vx) : 0
+  const edgeFade = 0.45 + (1 - Math.min(distFromCenter / 36, 1)) * 0.55
 
   ctx.save()
-  ctx.globalAlpha = alpha
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)'
-  ctx.lineWidth = 0.6
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(
-    x - Math.cos(dirAngle) * bristleLen,
-    y - Math.sin(dirAngle) * bristleLen,
-  )
-  ctx.stroke()
+  ctx.globalAlpha = alpha * edgeFade
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+  for (const bristle of bristles) {
+    const angle = bristle.angle + motionAngle * 0.15
+    const ex = x + Math.cos(angle) * bristle.length
+    const ey = y + Math.sin(angle) * bristle.length
+    const lit = 0.5 + Math.cos(angle - Math.atan2(SUN.y, SUN.x)) * 0.25
+
+    ctx.strokeStyle = `rgba(${Math.floor(235 + lit * 20)}, ${Math.floor(238 + lit * 15)}, ${Math.floor(240 + lit * 10)}, ${0.35 + lit * 0.45})`
+    ctx.lineWidth = bristle.thickness
+    ctx.shadowBlur = 2.5
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.35)'
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(ex, ey)
+    ctx.stroke()
+  }
+
+  ctx.shadowBlur = 0
+  ctx.fillStyle = `rgba(255, 252, 248, ${0.65 + edgeFade * 0.3})`
   ctx.beginPath()
-  ctx.arc(x, y, 1.2, 0, Math.PI * 2)
+  ctx.arc(x, y, 0.7 + edgeFade * 0.4, 0, Math.PI * 2)
   ctx.fill()
   ctx.restore()
 }
@@ -200,11 +168,15 @@ function drawHead(
   radius: number,
 ): void {
   ctx.save()
-  const g = ctx.createRadialGradient(x, y, 0, x, y, radius)
-  g.addColorStop(0, 'rgba(255, 255, 255, 0.95)')
-  g.addColorStop(0.6, 'rgba(240, 240, 235, 0.7)')
-  g.addColorStop(1, 'rgba(200, 200, 195, 0.2)')
+  const lx = x + SUN.x * radius * 0.6
+  const ly = y + SUN.y * radius * 0.6
+  const g = ctx.createRadialGradient(lx, ly, 0, x, y, radius * 1.4)
+  g.addColorStop(0, 'rgba(255, 255, 252, 0.92)')
+  g.addColorStop(0.45, 'rgba(245, 243, 235, 0.55)')
+  g.addColorStop(1, 'rgba(180, 178, 170, 0.08)')
   ctx.fillStyle = g
+  ctx.shadowBlur = 6
+  ctx.shadowColor = 'rgba(255, 255, 240, 0.25)'
   ctx.beginPath()
   ctx.arc(x, y, radius, 0, Math.PI * 2)
   ctx.fill()
@@ -223,7 +195,7 @@ function drawRoot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 // ─── 主 Composable ────────────────────────────────────────────────────────────
 
 const STEM_NODES = 8
-const SEED_COUNT = 64
+const SEED_COUNT = 96
 const TRAIL_MAX = 48
 
 export function useDandelionPhysics(
@@ -239,7 +211,7 @@ export function useDandelionPhysics(
   const phase = ref<DandelionPhase>('idle')
   const fadeOpacity = ref(1)
 
-  const perlin = new PerlinNoise2D(2026)
+  const focusPoint = ref({ x: 0, y: 0 })
   let engine: PhysicsEngine | null = null
   let seeds: FluffSeed[] = []
   let trails: WindTrail[] = []
@@ -301,30 +273,40 @@ export function useDandelionPhysics(
     const headY = groundY - (STEM_NODES - 1) * segLen
 
     for (let i = 0; i < SEED_COUNT; i++) {
-      const angle = (i / SEED_COUNT) * Math.PI * 2 + Math.random() * 0.2
-      const dist = 14 + Math.random() * 22
+      const angle = (i / SEED_COUNT) * Math.PI * 2 + Math.random() * 0.15
+      const dist = 8 + Math.random() * 28
       const ox = Math.cos(angle) * dist
-      const oy = Math.sin(angle) * dist * 0.65
+      const oy = Math.sin(angle) * dist * 0.62
       const sx = cx + ox
       const sy = headY + oy
+
+      const bristleCount = 2 + Math.floor(Math.random() * 3)
+      const bristles: PappusBristle[] = []
+      for (let b = 0; b < bristleCount; b++) {
+        bristles.push({
+          angle: angle + Math.PI + (b - bristleCount / 2) * 0.18,
+          length: 7 + Math.random() * 10 + (1 - dist / 36) * 4,
+          thickness: 0.35 + Math.random() * 0.35,
+        })
+      }
 
       const engineId = engine.addParticle({
         x: sx,
         y: sy,
         prevX: sx,
         prevY: sy,
-        mass: 0.25 + Math.random() * 0.2,
+        mass: 0.22 + Math.random() * 0.18,
         pinned: false,
-        radius: 1.2,
-        drag: 1.5,
+        radius: 1,
+        drag: 1.6,
       })
 
       engine.addSpring({
         a: headEngineId,
         b: engineId,
         restLength: dist,
-        stiffness: 0.06 + Math.random() * 0.03,
-        damping: 0.015,
+        stiffness: 0.05 + Math.random() * 0.03,
+        damping: 0.018,
       })
 
       seeds.push({
@@ -336,14 +318,16 @@ export function useDandelionPhysics(
         prevY: sy,
         vx: 0,
         vy: 0,
-        mass: 0.3,
-        friction: 0.985,
-        bristleAngle: angle + Math.PI,
-        bristleLen: 8 + Math.random() * 6,
+        mass: 0.28,
+        friction: 0.984,
+        bristles,
         detached: false,
         engineId,
+        distFromCenter: dist,
       })
     }
+
+    focusPoint.value = { x: cx, y: headY }
   }
 
   // ── 风迹粒子 ──
@@ -400,18 +384,20 @@ export function useDandelionPhysics(
 
       if (i <= headEngineId) {
         const nodeFactor = i / (STEM_NODES - 1)
-        const ambient = perlin.sampleField(p.x, p.y, time, 0.002)
+        const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.002, 4)
+        const forceScale = dt * 0.0045
         return {
-          x: wind.x * nodeFactor * 1.2 + ambient.x * 0.06 * nodeFactor,
-          y: wind.y * nodeFactor * 0.8 + ambient.y * 0.04 * nodeFactor,
+          x: (wind.x * nodeFactor * 1.3 + ambient.x * 0.14 * nodeFactor) * forceScale,
+          y: (wind.y * nodeFactor * 0.85 + ambient.y * 0.08 * nodeFactor) * forceScale,
         }
       }
 
-      const fluffWind = perlin.sampleField(p.x, p.y, time, 0.006)
+      const fluffWind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
       const fluffMouse = computeMouseWind(mouse ?? head, p, 200, 1.2)
+      const forceScale = dt * 0.0035
       return {
-        x: fluffWind.x * 0.2 + fluffMouse.x,
-        y: fluffWind.y * 0.12 + fluffMouse.y,
+        x: (fluffWind.x * 0.35 + fluffMouse.x) * forceScale,
+        y: (fluffWind.y * 0.2 + fluffMouse.y) * forceScale,
       }
     })
   }
@@ -447,11 +433,12 @@ export function useDandelionPhysics(
     for (const seed of seeds) {
       if (!seed.detached) continue
 
-      const wind = perlin.sampleField(seed.x, seed.y, time, 0.005)
-      const windForce = 1.8
+      const wind = sharedPerlin.sampleWindField(seed.x, seed.y, time, 0.004, 4)
+      const turb = sharedPerlin.fbm(seed.x * 0.008, seed.y * 0.008 + time * 0.0003, 2)
+      const windForce = 2.2 + turb * 0.8
 
       seed.vx += (wind.x * windForce) / seed.mass
-      seed.vy += (wind.y * windForce - 0.08) / seed.mass
+      seed.vy += (wind.y * windForce - 0.07) / seed.mass
       seed.vx *= seed.friction
       seed.vy *= seed.friction
       seed.x += seed.vx * dtSec
@@ -461,11 +448,13 @@ export function useDandelionPhysics(
 
   function updateBlowingPhysics(time: number, dt: number): void {
     const head = getHead()
-    const sway = perlin.sampleField(head.x, head.y, time, 0.003)
+    const sway = sharedPerlin.sampleWindField(head.x, head.y, time, 0.0025, 3)
+    const forceScale = dt * 0.003
     engine!.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
       if (i <= headEngineId) {
-        return { x: sway.x * 0.4 * (i / headEngineId), y: sway.y * 0.2 }
+        const f = i / headEngineId
+        return { x: sway.x * 0.5 * f * forceScale, y: sway.y * 0.25 * f * forceScale }
       }
       return { x: 0, y: 0 }
     })
@@ -489,12 +478,13 @@ export function useDandelionPhysics(
     drawRoot(ctx, rootPos.x, rootPos.y)
 
     const head = getHead()
+    focusPoint.value = { x: head.x, y: head.y }
     const headAlpha = phase.value === 'fading'
       ? fadeOpacity.value
       : 1
 
     if (phase.value === 'idle' || phase.value === 'blowing') {
-      drawHead(ctx, head.x, head.y, 10 * headAlpha)
+      drawHead(ctx, head.x, head.y, 11 * headAlpha)
     }
 
     for (const seed of seeds) {
@@ -517,7 +507,7 @@ export function useDandelionPhysics(
       }
 
       const seedAlpha = phase.value === 'fading' ? fadeOpacity.value : 1
-      drawFluffSeed(ctx, sx, sy, svx, svy, seed.bristleAngle, seed.bristleLen, seedAlpha)
+      drawFluffSeed(ctx, sx, sy, svx, svy, seed.bristles, seed.distFromCenter, seedAlpha)
     }
   }
 
@@ -626,6 +616,7 @@ export function useDandelionPhysics(
   return {
     phase,
     fadeOpacity,
+    focusPoint,
     triggerBlow,
     onClick,
   }
