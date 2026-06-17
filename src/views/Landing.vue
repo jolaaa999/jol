@@ -2,19 +2,27 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDandelionPhysics } from '@/composables/useDandelionPhysics'
+import PoemUnlock from '@/components/PoemUnlock.vue'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const router = useRouter()
+const showUnlock = ref(false)
 
 const { phase, fadeOpacity, onClick } = useDandelionPhysics(canvasRef, {
   blowDuration: 1500,
   fadeDuration: 600,
-  onTransitionComplete: () => router.push('/blog'),
+  onTransitionComplete: () => {
+    showUnlock.value = true
+  },
 })
 
-const showHint = computed(() => phase.value === 'idle')
+function onUnlockComplete(): void {
+  router.push('/blog')
+}
+
+const showHint = computed(() => phase.value === 'idle' && !showUnlock.value)
 const overlayOpacity = computed(() =>
-  phase.value === 'fading' ? 1 - fadeOpacity.value : 0,
+  phase.value === 'fading' && !showUnlock.value ? 1 - fadeOpacity.value : 0,
 )
 </script>
 
@@ -81,6 +89,9 @@ const overlayOpacity = computed(() =>
         点击屏幕 · 吹散蒲公英
       </p>
     </Transition>
+
+    <!-- 诗文解锁 -->
+    <PoemUnlock v-if="showUnlock" @complete="onUnlockComplete" />
   </div>
 </template>
 
