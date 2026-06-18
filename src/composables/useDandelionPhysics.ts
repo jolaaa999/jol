@@ -63,7 +63,7 @@ interface FluffSeed {
 const SUN = { x: -0.78, y: -0.62, intensity: 1.15 }
 
 const STEM_NODES = 8
-const SEED_COUNT = 280
+const SEED_COUNT = 1280
 const TRAIL_MAX = 28
 const MAX_DPR = 2
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))

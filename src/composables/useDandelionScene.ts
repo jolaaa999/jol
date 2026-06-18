@@ -10,7 +10,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
   let rafId = 0
   let lastTime = 0
 
-  const SEED_COUNT = 48
+  const SEED_COUNT = 148
   const HEAD_ID = 0
 
   function initScene(width: number, height: number): void {
