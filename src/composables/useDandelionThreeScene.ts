@@ -117,8 +117,8 @@ export function useDandelionThreeScene(
     headPx = { x: cx, y: groundY - (STEM_NODES - 1) * ((groundY - headY) / (STEM_NODES - 1)) }
 
     engine = new PhysicsEngine({
-      gravity: { x: 0, y: 0.05 },
-      globalDamping: 0.986,
+      gravity: { x: 0, y: 0 },
+      globalDamping: 0.988,
       substeps: 3,
     })
 
