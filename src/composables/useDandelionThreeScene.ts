@@ -30,7 +30,8 @@ interface FluffParticle {
 }
 
 const STEM_NODES = 8
-const PARTICLE_COUNT = 720
+const PARTICLE_COUNT = 1280
+const PARTICLE_SIZE = 4.3
 const MAX_DPR = 2
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
@@ -113,7 +114,7 @@ export function useDandelionThreeScene(
     canvasH = height
 
     const { cx, groundY, headY } = getLandingLayout(width, height)
-    headSpread = Math.min(width, height) * 0.32
+    headSpread = Math.min(width, height) * 0.34
     headPx = { x: cx, y: groundY - (STEM_NODES - 1) * ((groundY - headY) / (STEM_NODES - 1)) }
 
     engine = new PhysicsEngine({
@@ -152,11 +153,11 @@ export function useDandelionThreeScene(
     const seedAnchorY = headPx.y
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const t = (i + Math.random() * 0.5) / PARTICLE_COUNT
+      const t = (i + Math.random() * 0.35) / PARTICLE_COUNT
       const dist = headSpread * Math.sqrt(t)
-      const angle = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.1
+      const angle = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.14
       const ox = Math.cos(angle) * dist
-      const oy = Math.sin(angle) * dist * 0.9
+      const oy = Math.sin(angle) * dist * 0.92
       const sx = cx + ox
       const sy = seedAnchorY + oy
 
@@ -165,10 +166,10 @@ export function useDandelionThreeScene(
         y: sy,
         prevX: sx,
         prevY: sy,
-        mass: 0.18 + Math.random() * 0.14,
+        mass: 0.16 + Math.random() * 0.12,
         pinned: false,
         radius: 0.5,
-        drag: 1.4,
+        drag: 1.55,
       })
 
       engine.addSpring({
@@ -189,7 +190,7 @@ export function useDandelionThreeScene(
         distFromCenter: dist,
         layer: Math.min(2, Math.floor((dist / headSpread) * 3)),
         warmup: 0,
-        goldMix: 0.35 + Math.random() * 0.55,
+        goldMix: 0.45 + Math.random() * 0.5,
         z: (Math.random() - 0.5) * 12,
       })
     }
@@ -230,10 +231,10 @@ export function useDandelionThreeScene(
 
     glowTexture = createGlowTexture()
     const mat = new THREE.PointsMaterial({
-      size: 5.2,
+      size: PARTICLE_SIZE,
       map: glowTexture,
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.9,
       vertexColors: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -263,9 +264,9 @@ export function useDandelionThreeScene(
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3))
     const mat = new THREE.LineBasicMaterial({
-      color: 0x5a8a48,
+      color: 0x5c7a38,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
     })
     stemLine = new THREE.Line(geo, mat)
     scene.add(stemLine)
@@ -280,9 +281,9 @@ export function useDandelionThreeScene(
     const hw = pxToWorld(head.x, head.y, canvasW, canvasH)
     const glowGeo = new THREE.CircleGeometry(headSpread * 0.28, 36)
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xfff8e8,
+      color: 0xfff4d0,
       transparent: true,
-      opacity: 0.18,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })

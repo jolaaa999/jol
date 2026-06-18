@@ -60,10 +60,10 @@ const overlayOpacity = computed(() =>
   cursor: crosshair;
   user-select: none;
   background:
-    radial-gradient(circle at 18% 18%, rgba(255, 210, 240, 0.9), transparent 34%),
-    radial-gradient(circle at 82% 22%, rgba(180, 225, 255, 0.88), transparent 36%),
-    radial-gradient(circle at 50% 78%, rgba(255, 235, 248, 0.92), transparent 30%),
-    linear-gradient(145deg, #f7d7f2 0%, #d8ecff 48%, #c9ddff 100%);
+    radial-gradient(circle at 15% 12%, rgba(255, 248, 210, 0.95), transparent 38%),
+    radial-gradient(circle at 88% 18%, rgba(255, 235, 170, 0.85), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(210, 175, 95, 0.55), transparent 42%),
+    linear-gradient(168deg, #fff8e6 0%, #f5e6b8 38%, #e8d49a 68%, #dcc888 100%);
 }
 
 .layer {
@@ -84,8 +84,8 @@ const overlayOpacity = computed(() =>
   inset: 0;
   z-index: 20;
   background:
-    radial-gradient(circle at 22% 28%, rgba(255, 255, 255, 0.45), transparent 26%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.08));
+    radial-gradient(circle at 30% 25%, rgba(255, 252, 235, 0.5), transparent 28%),
+    linear-gradient(168deg, rgba(255, 248, 220, 0.35), rgba(232, 210, 150, 0.12));
   pointer-events: none;
   transition: opacity 0.05s linear;
 }
@@ -96,8 +96,8 @@ const overlayOpacity = computed(() =>
   left: 50%;
   transform: translateX(-50%);
   z-index: 15;
-  color: rgba(98, 92, 130, 0.78);
-  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.55);
+  color: rgba(88, 72, 42, 0.72);
+  text-shadow: 0 1px 8px rgba(255, 252, 235, 0.65);
   letter-spacing: 0.18em;
   pointer-events: none;
 }
