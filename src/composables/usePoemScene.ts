@@ -54,7 +54,13 @@ const GROUND_CHAR_MIN = 0.32
 const GROUND_CHAR_MAX = 0.84
 const GROUND_EXTRA_COUNT = 56
 const BG_Z = -14
-const BG_CELL = 2.35
+const BG_CELL = 1.92
+
+interface BackgroundChar {
+  mesh: THREE.Mesh
+  phase: number
+  speed: number
+}
 
 export function usePoemScene(
   canvasRef: Ref<HTMLCanvasElement | null>,
@@ -82,6 +88,7 @@ export function usePoemScene(
   const groundGroup = new THREE.Group()
   const floatingSlots: FloatingSlot[] = []
   const groundTiles: GroundTile[] = []
+  const backgroundChars: BackgroundChar[] = []
   let particles: Particle[] | null = null
   let pointsMesh: THREE.Points | null = null
   let dissolveStart = 0
@@ -217,6 +224,11 @@ export function usePoemScene(
   }
 
   function buildBackgroundBoard(font: Font, layout: PoemLayout): void {
+    for (const bg of backgroundChars) {
+      bg.mesh.geometry.dispose()
+      ;(bg.mesh.material as THREE.Material).dispose()
+    }
+    backgroundChars.length = 0
     backgroundGroup.clear()
 
     if (!camera) return
@@ -236,23 +248,41 @@ export function usePoemScene(
     const startX = -(cols * BG_CELL) / 2
     const startY = -(rows * BG_CELL) / 2 + 0.6
 
-    const mat = createBackgroundMaterial()
-
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
-        const x = startX + col * BG_CELL + (Math.random() - 0.5) * 0.35
-        const y = startY + row * BG_CELL + (Math.random() - 0.5) * 0.35
+        const x = startX + col * BG_CELL + (Math.random() - 0.5) * 0.22
+        const y = startY + row * BG_CELL + (Math.random() - 0.5) * 0.22
 
         if (Math.abs(x) < 3.8 && Math.abs(y - 0.8) < 4.2) continue
 
         const char = pool[poolIdx % pool.length]
         poolIdx++
 
-        const mesh = makeTextMesh(font, char, mat, BG_CHAR_SIZE, CHAR_DEPTH * 0.6)
+        const mesh = makeTextMesh(font, char, createBackgroundMaterial(), BG_CHAR_SIZE, CHAR_DEPTH * 0.6)
         mesh.position.set(x, y, BG_Z)
         mesh.rotation.set(0, 0, 0)
         backgroundGroup.add(mesh)
+        backgroundChars.push({
+          mesh,
+          phase: Math.random() * Math.PI * 2,
+          speed: 0.35 + Math.random() * 0.85,
+        })
       }
+    }
+  }
+
+  function updateBackgroundSparkle(time: number): void {
+    for (const bg of backgroundChars) {
+      const mat = bg.mesh.material as THREE.MeshStandardMaterial
+      const t = time * bg.speed + bg.phase
+      const flicker =
+        Math.sin(t * 1.65) * Math.sin(t * 2.35 + 0.9) * Math.sin(t * 0.58 + 1.4)
+      const sparkle = flicker > 0.72 ? (flicker - 0.72) / 0.28 : 0
+      const eased = sparkle * sparkle * (3 - 2 * sparkle)
+
+      mat.emissiveIntensity = 0.1 + eased * 0.82
+      mat.emissive.setRGB(0.22 + eased * 0.55, 0.17 + eased * 0.42, 0.04 + eased * 0.06)
+      mat.color.setRGB(0.58 + eased * 0.18, 0.52 + eased * 0.22, 0.42 + eased * 0.12)
     }
   }
 
@@ -402,6 +432,11 @@ export function usePoemScene(
     pointsMesh = null
     floatingSlots.length = 0
     groundTiles.length = 0
+    for (const bg of backgroundChars) {
+      bg.mesh.geometry.dispose()
+      ;(bg.mesh.material as THREE.Material).dispose()
+    }
+    backgroundChars.length = 0
     poemGroup.clear()
     backgroundGroup.clear()
     groundGroup.clear()
@@ -665,6 +700,7 @@ export function usePoemScene(
     const dt = clock.getDelta()
 
     if (phase.value === 'playing') {
+      updateBackgroundSparkle(clock.elapsedTime)
       groundGroup.children.forEach((c, i) => {
         c.position.y = GROUND_Y + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
       })
