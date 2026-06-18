@@ -2,6 +2,15 @@ import type { PoemArticle, PoemLayout, PoemCharSlot } from '@/types/poem'
 
 const PUNCT = new Set('，。、；：？！…—·')
 
+/** 解锁页固定诗文 */
+export const UNLOCK_POEM: PoemArticle = {
+  id: 'unlock-fixed',
+  title: '半手抚柔面',
+  content: '半手抚柔面，\n青丝渡香腮',
+}
+
+export const UNLOCK_BLANK_CHARS = ['抚', '渡'] as const
+
 export function buildPoemLayout(
   article: PoemArticle,
   blankCount = 3,
@@ -60,9 +69,60 @@ export function collectDistractorChars(layout: PoemLayout): string[] {
   for (const s of layout.slots) {
     if (!PUNCT.has(s.char)) set.add(s.char)
   }
-  const extras = '风月花草云山水月夜光梦诗文字代码拓扑窗口编译'
+  const extras = '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露'
   for (const c of extras) set.add(c)
   return [...set]
+}
+
+/** 按指定字挖空（仅挖非标点且首次匹配） */
+export function buildPoemLayoutWithBlanks(
+  article: PoemArticle,
+  blankChars: readonly string[],
+): PoemLayout {
+  const layout = buildPoemLayout(article, 0)
+  const wanted = new Set(blankChars)
+  const blankIndices = new Set<number>()
+
+  for (const slot of layout.slots) {
+    if (wanted.has(slot.char) && !PUNCT.has(slot.char)) {
+      slot.isBlank = true
+      slot.filled = false
+      blankIndices.add(slot.globalIndex)
+      wanted.delete(slot.char)
+    } else if (!slot.isBlank) {
+      slot.filled = true
+    }
+  }
+
+  layout.blankIndices = blankIndices
+  return layout
+}
+
+/** 背景字阵字符池 — 重复铺陈以铺满画面 */
+export function buildBackgroundCharPool(layout: PoemLayout): string[] {
+  const pool: string[] = []
+  for (const s of layout.slots) {
+    if (!PUNCT.has(s.char)) pool.push(s.char)
+  }
+  const extras =
+    '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露半手柔面青丝香腮'
+  for (let r = 0; r < 6; r++) {
+    for (const c of extras) pool.push(c)
+  }
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool
+}
+
+export function collectAllFontChars(layout: PoemLayout): string {
+  return (
+    layout.slots.map((s) => s.char).join('') +
+    collectDistractorChars(layout).join('') +
+    buildBackgroundCharPool(layout).join('') +
+    '□'
+  )
 }
 
 export function pickRandomPoem(

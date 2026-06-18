@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import type { PoemLayout } from '@/types/poem'
-import { collectDistractorChars } from '@/utils/poemLayout'
+import { collectDistractorChars, buildBackgroundCharPool } from '@/utils/poemLayout'
 import { fontHasChar } from '@/utils/chineseFontLoader'
 
 export type PoemScenePhase = 'loading' | 'playing' | 'dissolving' | 'complete'
@@ -45,9 +45,12 @@ interface Particle {
 const COL_SP = 1.75
 const ROW_SP = 1.55
 const CHAR_SIZE = 0.52
-const CHAR_DEPTH = 0.12
-const GROUND_Y = -2.8
-const SCATTER_R = 9
+const CHAR_DEPTH = 0.08
+const BG_CHAR_SIZE = 0.38
+const GROUND_Y = -3.2
+const SCATTER_R = 8
+const BG_Z = -14
+const BG_CELL = 2.35
 
 export function usePoemScene(
   canvasRef: Ref<HTMLCanvasElement | null>,
@@ -71,6 +74,7 @@ export function usePoemScene(
   let clock = new THREE.Clock()
 
   const poemGroup = new THREE.Group()
+  const backgroundGroup = new THREE.Group()
   const groundGroup = new THREE.Group()
   const floatingSlots: FloatingSlot[] = []
   const groundTiles: GroundTile[] = []
@@ -84,21 +88,31 @@ export function usePoemScene(
 
   function createGlowMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0xffe566,
-      emissive: 0xffc832,
-      emissiveIntensity: 1.2,
-      metalness: 0.35,
-      roughness: 0.25,
+      color: 0xfff0c8,
+      emissive: 0xffd070,
+      emissiveIntensity: 0.42,
+      metalness: 0.15,
+      roughness: 0.55,
+    })
+  }
+
+  function createBackgroundMaterial(): THREE.MeshStandardMaterial {
+    return new THREE.MeshStandardMaterial({
+      color: 0x9a8e78,
+      emissive: 0x3a3428,
+      emissiveIntensity: 0.12,
+      metalness: 0.1,
+      roughness: 0.72,
     })
   }
 
   function createGroundMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0xc4a060,
-      emissive: 0x6a5020,
-      emissiveIntensity: 0.55,
-      metalness: 0.65,
-      roughness: 0.32,
+      color: 0xc8b890,
+      emissive: 0x5a4830,
+      emissiveIntensity: 0.28,
+      metalness: 0.2,
+      roughness: 0.58,
     })
   }
 
@@ -127,6 +141,8 @@ export function usePoemScene(
     font: Font,
     char: string,
     material: THREE.Material,
+    size = CHAR_SIZE,
+    depth = CHAR_DEPTH,
   ): THREE.Mesh {
     const renderChar = fontHasChar(font, char)
       ? char
@@ -135,13 +151,10 @@ export function usePoemScene(
         : '?'
     const geo = new TextGeometry(renderChar, {
       font,
-      size: CHAR_SIZE,
-      depth: CHAR_DEPTH,
-      curveSegments: 8,
-      bevelEnabled: true,
-      bevelThickness: 0.015,
-      bevelSize: 0.01,
-      bevelSegments: 2,
+      size,
+      depth,
+      curveSegments: 6,
+      bevelEnabled: false,
     })
     geo.computeBoundingBox()
     geo.center()
@@ -199,6 +212,46 @@ export function usePoemScene(
     filledCount.value = 0
   }
 
+  function buildBackgroundBoard(font: Font, layout: PoemLayout): void {
+    backgroundGroup.clear()
+
+    if (!camera) return
+
+    const pool = buildBackgroundCharPool(layout)
+    let poolIdx = 0
+
+    const dist = Math.abs(camera.position.z - BG_Z)
+    const vFov = (camera.fov * Math.PI) / 180
+    const visibleH = 2 * Math.tan(vFov / 2) * dist
+    const visibleW = visibleH * camera.aspect
+
+    const marginX = visibleW * 0.55
+    const marginY = visibleH * 0.52
+    const cols = Math.ceil(marginX * 2 / BG_CELL) + 2
+    const rows = Math.ceil(marginY * 2 / BG_CELL) + 2
+    const startX = -(cols * BG_CELL) / 2
+    const startY = -(rows * BG_CELL) / 2 + 0.6
+
+    const mat = createBackgroundMaterial()
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = startX + col * BG_CELL + (Math.random() - 0.5) * 0.35
+        const y = startY + row * BG_CELL + (Math.random() - 0.5) * 0.35
+
+        if (Math.abs(x) < 3.8 && Math.abs(y - 0.8) < 4.2) continue
+
+        const char = pool[poolIdx % pool.length]
+        poolIdx++
+
+        const mesh = makeTextMesh(font, char, mat, BG_CHAR_SIZE, CHAR_DEPTH * 0.6)
+        mesh.position.set(x, y, BG_Z)
+        mesh.rotation.set(0, 0, 0)
+        backgroundGroup.add(mesh)
+      }
+    }
+  }
+
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
@@ -233,11 +286,7 @@ export function usePoemScene(
 
       const mesh = makeTextMesh(font, item.char, createGroundMaterial())
       mesh.position.set(x, y, z)
-      mesh.rotation.set(
-        -Math.PI * 0.5 + (Math.random() - 0.5) * 0.08,
-        Math.random() * Math.PI * 2,
-        (Math.random() - 0.5) * 0.06,
-      )
+      mesh.rotation.set(0, 0, (Math.random() - 0.5) * 0.04)
       mesh.userData.groundChar = true
       groundGroup.add(mesh)
 
@@ -269,48 +318,51 @@ export function usePoemScene(
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(width, height, false)
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.1
+    renderer.toneMappingExposure = 0.88
 
     scene = new THREE.Scene()
     scene.background = new THREE.Color(0x050508)
-    scene.fog = new THREE.FogExp2(0x050508, 0.045)
+    scene.fog = new THREE.FogExp2(0x050508, 0.028)
 
-    camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 200)
-    camera.position.set(0, 5.5, 11)
-    camera.lookAt(0, -0.5, 0)
+    camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 200)
+    camera.position.set(0, 0.9, 13)
+    camera.lookAt(0, 0.6, 0)
 
-    scene.add(new THREE.AmbientLight(0x2a2840, 0.85))
-    const key = new THREE.DirectionalLight(0xffe8b0, 1.6)
-    key.position.set(4, 10, 6)
+    scene.add(new THREE.AmbientLight(0x3a3848, 1.0))
+    const key = new THREE.DirectionalLight(0xfff0d8, 0.95)
+    key.position.set(2, 6, 10)
     scene.add(key)
-    const rim = new THREE.PointLight(0xff9020, 1.1, 40)
-    rim.position.set(-6, 4, -4)
+    const fill = new THREE.DirectionalLight(0xc8d0e8, 0.35)
+    fill.position.set(-4, 2, 6)
+    scene.add(fill)
+    const rim = new THREE.PointLight(0xffb040, 0.45, 40)
+    rim.position.set(-5, 3, -3)
     scene.add(rim)
-    const groundLight = new THREE.PointLight(0xffcc66, 0.9, 30)
-    groundLight.position.set(0, 1, 4)
-    scene.add(groundLight)
 
+    scene.add(backgroundGroup)
     scene.add(poemGroup)
     scene.add(groundGroup)
 
     const renderPass = new RenderPass(scene, camera)
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      1.35,
-      0.55,
-      0.12,
+      0.38,
+      0.45,
+      0.72,
     )
     composer = new EffectComposer(renderer)
     composer.addPass(renderPass)
     composer.addPass(bloom)
 
     poemGroup.position.set(0, 0.8, 0)
+    poemGroup.rotation.set(0, 0, 0)
   }
 
   function rebuildScene(): void {
     const font = fontRef.value
     const layout = layoutRef.value
     if (!font || !layout || !scene) return
+    buildBackgroundBoard(font, layout)
     buildFloatingPoem(font, layout)
     buildGroundChars(font, layout)
     phase.value = 'playing'
@@ -335,6 +387,7 @@ export function usePoemScene(
     floatingSlots.length = 0
     groundTiles.length = 0
     poemGroup.clear()
+    backgroundGroup.clear()
     groundGroup.clear()
   }
 
@@ -444,8 +497,8 @@ export function usePoemScene(
         )
         const mat = glowMesh.material as THREE.MeshStandardMaterial
         const emissive = { intensity: mat.emissiveIntensity }
-        gsap.fromTo(emissive, { intensity: 2.5 }, {
-          intensity: 1.2,
+        gsap.fromTo(emissive, { intensity: 0.65 }, {
+          intensity: 0.42,
           duration: 0.5,
           ease: 'power2.out',
           onUpdate: () => {
@@ -577,6 +630,11 @@ export function usePoemScene(
     camera.updateProjectionMatrix()
     renderer.setSize(width, height, false)
     composer.setSize(width, height)
+    const layout = layoutRef.value
+    const font = fontRef.value
+    if (layout && font && scene) {
+      buildBackgroundBoard(font, layout)
+    }
   }
 
   function animate(): void {
@@ -586,9 +644,8 @@ export function usePoemScene(
     const dt = clock.getDelta()
 
     if (phase.value === 'playing') {
-      poemGroup.rotation.y = Math.sin(clock.elapsedTime * 0.15) * 0.04
       groundGroup.children.forEach((c, i) => {
-        c.position.y = GROUND_Y + Math.sin(clock.elapsedTime * 0.8 + i) * 0.03
+        c.position.y = GROUND_Y + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
       })
     }
 

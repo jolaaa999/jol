@@ -3,8 +3,13 @@ import { ref, shallowRef, onUnmounted } from 'vue'
 import { Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { usePoemScene } from '@/composables/usePoemScene'
 import { loadChineseFont } from '@/utils/chineseFontLoader'
-import { buildPoemLayout, pickRandomPoem } from '@/utils/poemLayout'
-import type { PoemArticle, PoemLayout } from '@/types/poem'
+import {
+  UNLOCK_POEM,
+  UNLOCK_BLANK_CHARS,
+  buildPoemLayoutWithBlanks,
+  collectAllFontChars,
+} from '@/utils/poemLayout'
+import type { PoemLayout } from '@/types/poem'
 
 const emit = defineEmits<{
   complete: []
@@ -15,7 +20,6 @@ const layoutRef = shallowRef<PoemLayout | null>(null)
 const fontRef = shallowRef<Font | null>(null)
 const loadError = ref(false)
 const loading = ref(true)
-const poemTitle = ref('')
 
 const { phase, filledCount, totalBlanks, init, dispose, rebuildScene } =
   usePoemScene(canvasRef, layoutRef, fontRef, {
@@ -28,48 +32,8 @@ async function bootstrap(): Promise<void> {
   loadError.value = false
 
   try {
-    let articles: PoemArticle[] = []
-
-    try {
-      const res = await fetch('/api/poetry')
-      if (res.ok) {
-        const json = (await res.json()) as {
-          data: Array<{ id: string; title: string; content: string }>
-        }
-        articles = json.data.map((a) => ({
-          id: a.id,
-          title: a.title,
-          content: a.content,
-        }))
-      }
-    } catch {
-      /* 回退本地 mock */
-    }
-
-    if (!articles.length) {
-      articles = [
-        {
-          id: 'p-001',
-          title: '静夜',
-          content: '月色落在窗棂上，\n像一段未完成的代码，\n等待被编译成梦。',
-        },
-        {
-          id: 'p-002',
-          title: '风过草原',
-          content: '蒲公英解体的那一秒，\n整片草原都在悄悄重写自己的坐标系。',
-        },
-      ]
-    }
-
-    const picked = pickRandomPoem(articles)
-    poemTitle.value = picked.title
-    const layout = buildPoemLayout(picked, 1 + Math.floor(Math.random() * 2))
-
-    const allChars =
-      layout.slots.map((s) => s.char).join('') +
-      collectCharsForFont(layout)
-
-    const font = await loadChineseFont(allChars)
+    const layout = buildPoemLayoutWithBlanks(UNLOCK_POEM, UNLOCK_BLANK_CHARS)
+    const font = await loadChineseFont(collectAllFontChars(layout))
     fontRef.value = font
     layoutRef.value = layout
     loading.value = false
@@ -80,11 +44,6 @@ async function bootstrap(): Promise<void> {
     loadError.value = true
     loading.value = false
   }
-}
-
-function collectCharsForFont(layout: PoemLayout): string {
-  const distractors = '风月花草云山水月夜光梦诗文字代码拓扑窗口编译'
-  return distractors + '□' + layout.slots.map((s) => s.char).join('')
 }
 
 bootstrap()
@@ -105,7 +64,6 @@ onUnmounted(dispose)
     </div>
 
     <div v-else-if="phase === 'playing'" class="hud">
-      <p class="hud-title">{{ poemTitle }}</p>
       <p class="hud-hint industrial-label">
         点击地面文字 · 填入空缺 {{ filledCount }}/{{ totalBlanks }}
       </p>
@@ -140,24 +98,16 @@ onUnmounted(dispose)
 
 .hud {
   position: absolute;
-  top: 2rem;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
   pointer-events: none;
 }
 
-.hud-title {
-  margin: 0 0 0.5rem;
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: var(--color-accent-cyan);
-}
-
 .hud-hint {
   margin: 0;
-  color: var(--color-muted);
+  color: rgba(180, 175, 165, 0.75);
   letter-spacing: 0.16em;
 }
 </style>
