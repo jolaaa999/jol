@@ -1,4 +1,4 @@
-/** Landing 场景布局 — 草地与蒲公英共用地面线 */
+/** Landing 蒲公英场景布局 */
 export interface LandingLayout {
   cx: number
   headY: number

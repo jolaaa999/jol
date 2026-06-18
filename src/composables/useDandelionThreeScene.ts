@@ -7,14 +7,24 @@ import { PhysicsEngine, type Vec2 } from './usePhysicsEngine'
 import { sharedPerlin } from '@/utils/perlinNoise'
 import { getLandingLayout } from '@/composables/landingLayout'
 
+/**
+ * 蒲公英三维场景的运行阶段。
+ */
 export type DandelionPhase = 'idle' | 'blowing' | 'spreading' | 'done'
 
+/**
+ * `useDandelionThreeScene` 的可选配置项。
+ */
 export interface DandelionThreeOptions {
   /** 吹散后飘满屏幕的时长 (ms) */
   spreadDuration?: number
+  /** 场景完成过渡后的回调。 */
   onTransitionComplete?: () => void
 }
 
+/**
+ * 单个绒毛粒子的内部状态。
+ */
 interface FluffParticle {
   engineId: number
   detached: boolean
@@ -29,12 +39,66 @@ interface FluffParticle {
   z: number
 }
 
+/** 茎秆上的节点数量，决定主干的分段精度。 */
 const STEM_NODES = 8
+/** 绒毛粒子的总数。 */
 const PARTICLE_COUNT = 1280
+/** 绒毛点精灵的显示尺寸。 */
 const PARTICLE_SIZE = 4.3
+/** 渲染时允许使用的最大设备像素比。 */
 const MAX_DPR = 2
+/** 用于均匀分布粒子的黄金角。 */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
+/**
+ * 生成与 `Landing.vue` CSS 保持一致的麦黄田园渐变贴图，供 WebGL 背景使用。
+ */
+function createPastoralGradientTexture(width: number, height: number): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  const w = Math.max(1, Math.floor(width))
+  const h = Math.max(1, Math.floor(height))
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')!
+
+  const angle = ((168 - 90) * Math.PI) / 180
+  const cx = w / 2
+  const cy = h / 2
+  const diag = Math.hypot(w, h)
+  const linear = ctx.createLinearGradient(
+    cx + Math.cos(angle) * diag * 0.5,
+    cy + Math.sin(angle) * diag * 0.5,
+    cx - Math.cos(angle) * diag * 0.5,
+    cy - Math.sin(angle) * diag * 0.5,
+  )
+  linear.addColorStop(0, '#fff8e6')
+  linear.addColorStop(0.38, '#f5e6b8')
+  linear.addColorStop(0.68, '#e8d49a')
+  linear.addColorStop(1, '#dcc888')
+  ctx.fillStyle = linear
+  ctx.fillRect(0, 0, w, h)
+
+  const addRadial = (px: number, py: number, inner: string, radiusFrac: number): void => {
+    const r = Math.max(w, h) * radiusFrac
+    const g = ctx.createRadialGradient(px * w, py * h, 0, px * w, py * h, r)
+    g.addColorStop(0, inner)
+    g.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, w, h)
+  }
+  addRadial(0.15, 0.12, 'rgba(255, 248, 210, 0.95)', 0.38)
+  addRadial(0.88, 0.18, 'rgba(255, 235, 170, 0.85)', 0.34)
+  addRadial(0.5, 1.0, 'rgba(210, 175, 95, 0.55)', 0.42)
+
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.needsUpdate = true
+  return tex
+}
+
+/**
+ * 生成绒毛高亮使用的柔光纹理。
+ */
 function createGlowTexture(): THREE.CanvasTexture {
   const size = 64
   const canvas = document.createElement('canvas')
@@ -53,6 +117,9 @@ function createGlowTexture(): THREE.CanvasTexture {
   return tex
 }
 
+/**
+ * 根据鼠标与目标点的距离计算局部风力向量。
+ */
 function computeMouseWind(
   mouse: Vec2,
   target: Vec2,
@@ -72,6 +139,9 @@ function computeMouseWind(
   }
 }
 
+/**
+ * 将像素坐标转换为以画布中心为原点的世界坐标。
+ */
 function pxToWorld(px: number, py: number, w: number, h: number): THREE.Vector3 {
   return new THREE.Vector3(px - w / 2, h / 2 - py, 0)
 }
@@ -97,6 +167,7 @@ export function useDandelionThreeScene(
   let stemLine: THREE.Line | null = null
   let headGlow: THREE.Mesh | null = null
   let glowTexture: THREE.CanvasTexture | null = null
+  let backgroundTexture: THREE.CanvasTexture | null = null
 
   let mouse: Vec2 | null = null
   let prevMouse: Vec2 | null = null
@@ -109,6 +180,9 @@ export function useDandelionThreeScene(
   let headSpread = 120
   let headPx = { x: 0, y: 0 }
 
+  /**
+   * 构建或重建整个蒲公英场景的物理与几何结构。
+   */
   function buildScene(width: number, height: number): void {
     canvasW = width
     canvasH = height
@@ -199,6 +273,9 @@ export function useDandelionThreeScene(
     updateStemLine()
   }
 
+  /**
+   * 重建绒毛粒子的几何体与材质。
+   */
   function rebuildPointsGeometry(): void {
     if (!scene) return
 
@@ -292,6 +369,13 @@ export function useDandelionThreeScene(
     scene.add(headGlow)
   }
 
+  function updateSceneBackground(width: number, height: number): void {
+    if (!scene) return
+    backgroundTexture?.dispose()
+    backgroundTexture = createPastoralGradientTexture(width, height)
+    scene.background = backgroundTexture
+  }
+
   function initRenderer(): void {
     const canvas = canvasRef.value
     if (!canvas || renderer) return
@@ -303,14 +387,16 @@ export function useDandelionThreeScene(
 
     renderer = new THREE.WebGLRenderer({
       canvas,
-      alpha: true,
+      alpha: false,
       antialias: true,
       powerPreference: 'high-performance',
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DPR))
     renderer.setSize(w, h, false)
+    renderer.setClearColor(0xf5e6b8, 1)
 
     scene = new THREE.Scene()
+    updateSceneBackground(w, h)
 
     camera = new THREE.OrthographicCamera(-w / 2, w / 2, h / 2, -h / 2, 0.1, 500)
     camera.position.set(0, 0, 100)
@@ -513,6 +599,7 @@ export function useDandelionThreeScene(
       canvasH = h
       renderer!.setPixelRatio(dpr)
       renderer!.setSize(w, h, false)
+      updateSceneBackground(w, h)
       if (camera) {
         camera.left = -w / 2
         camera.right = w / 2
@@ -624,6 +711,7 @@ export function useDandelionThreeScene(
       ;(headGlow.material as THREE.Material).dispose()
     }
     glowTexture?.dispose()
+    backgroundTexture?.dispose()
     renderer?.dispose()
     renderer = null
     scene = null
@@ -632,6 +720,7 @@ export function useDandelionThreeScene(
     engine = null
     points = null
     fluffParticles = []
+    backgroundTexture = null
   }
 
   function onResize(): void {
@@ -642,6 +731,7 @@ export function useDandelionThreeScene(
     canvasW = w
     canvasH = h
     renderer.setSize(w, h, false)
+    updateSceneBackground(w, h)
     camera.left = -w / 2
     camera.right = w / 2
     camera.top = h / 2

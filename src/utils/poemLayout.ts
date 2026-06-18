@@ -6,7 +6,7 @@ const PUNCT = new Set('，。、；：？！…—·')
 export const UNLOCK_POEM: PoemArticle = {
   id: 'unlock-fixed',
   title: '半手抚柔面',
-  content: '半手抚柔面，\n青丝渡香腮',
+  content: '青丝渡香腮\n半手抚柔面',
 }
 
 export const UNLOCK_BLANK_CHARS = ['抚', '渡'] as const
