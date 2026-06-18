@@ -40,7 +40,8 @@ async function bootstrap(): Promise<void> {
 
     init()
     rebuildScene()
-  } catch {
+  } catch (err) {
+    console.error('[PoemUnlock] bootstrap failed:', err)
     loadError.value = true
     loading.value = false
   }

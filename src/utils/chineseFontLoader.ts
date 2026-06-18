@@ -8,7 +8,7 @@ interface TypefaceGlyph {
   o: string
 }
 
-interface TypefaceJson {
+export interface TypefaceJson {
   glyphs: Record<string, TypefaceGlyph>
   familyName: string
   ascender: number
@@ -20,10 +20,12 @@ interface TypefaceJson {
   original_font_information: Record<string, string>
 }
 
-const FONT_CANDIDATES = ['/fonts/poem.typeface.json']
+const FONT_JSON_CANDIDATES = ['/fonts/poem.typeface.json']
 
-const OTF_URL =
-  'https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/OTF/SimplifiedChinese/NotoSansSC-Regular.otf'
+/** 本地 WOFF 回退（需先运行 npm run generate:poem-font 生成 JSON，或自行放置字体） */
+const WOFF_CANDIDATES = [
+  '/fonts/noto-sans-sc-chinese-simplified-400-normal.woff',
+]
 
 let cachedFont: Font | null = null
 let cachedGlyphSet = new Set<string>()
@@ -41,11 +43,7 @@ function flipY(y: number, ascender: number): number {
   return ascender - y
 }
 
-/** 将 opentype 路径转为 Three.js typeface.json 的 `o` 字段 */
-function pathToTypefaceO(
-  path: opentype.Path,
-  ascender: number,
-): string {
+function pathToTypefaceO(path: opentype.Path, ascender: number): string {
   const parts: string[] = []
   for (const cmd of path.commands) {
     switch (cmd.type) {
@@ -73,27 +71,35 @@ function pathToTypefaceO(
   return parts.join(' ')
 }
 
-function buildTypefaceFromOpentype(
-  otFont: opentype.Font,
-  chars: string,
-): TypefaceJson {
+function glyphFromOpentype(otFont: opentype.Font, char: string): TypefaceGlyph | null {
+  const glyph = otFont.charToGlyph(char)
+  if (!glyph || glyph.index === 0) return null
+  const cp = char.codePointAt(0)
+  if (glyph.unicode !== cp) return null
+
+  const ascender = otFont.ascender
+  const scale = 1000 / otFont.unitsPerEm
+  const path = glyph.getPath(0, 0, 1000)
+  const bbox = path.getBoundingBox()
+
+  return {
+    ha: Math.round((glyph.advanceWidth ?? otFont.unitsPerEm) * scale),
+    x_min: bbox.x1,
+    x_max: bbox.x2,
+    o: pathToTypefaceO(path, ascender * scale),
+  }
+}
+
+function buildTypefaceFromOpentype(otFont: opentype.Font, chars: string): TypefaceJson {
   const unique = [...new Set(chars.split(''))].filter(Boolean)
   const ascender = otFont.ascender
   const descender = otFont.descender
   const scale = 1000 / otFont.unitsPerEm
-
   const glyphs: Record<string, TypefaceGlyph> = {}
 
   for (const char of unique) {
-    const glyph = otFont.charToGlyph(char)
-    const path = glyph.getPath(0, 0, 1000)
-    const bbox = path.getBoundingBox()
-    glyphs[char] = {
-      ha: Math.round((glyph.advanceWidth ?? otFont.unitsPerEm) * scale),
-      x_min: bbox.x1,
-      x_max: bbox.x2,
-      o: pathToTypefaceO(path, ascender * scale),
-    }
+    const g = glyphFromOpentype(otFont, char)
+    if (g) glyphs[char] = g
   }
 
   return {
@@ -114,28 +120,39 @@ function buildTypefaceFromOpentype(
   }
 }
 
-async function loadOpentypeFont(): Promise<opentype.Font> {
-  const buffer = await fetch(OTF_URL).then((r) => {
-    if (!r.ok) throw new Error('font fetch failed')
-    return r.arrayBuffer()
-  })
-  return opentype.parse(buffer)
-}
-
-async function loadJsonFont(url: string): Promise<Font | null> {
+async function loadTypefaceJson(url: string): Promise<TypefaceJson | null> {
   try {
     const res = await fetch(url)
     if (!res.ok) return null
-    const json = (await res.json()) as TypefaceJson
-    const loader = new FontLoader()
-    return loader.parse(json)
+    return (await res.json()) as TypefaceJson
   } catch {
     return null
   }
 }
 
+async function loadOpentypeFromUrls(urls: readonly string[]): Promise<opentype.Font | null> {
+  for (const url of urls) {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) continue
+      const buffer = await res.arrayBuffer()
+      return opentype.parse(buffer)
+    } catch {
+      /* try next */
+    }
+  }
+  return null
+}
+
+function mergeGlyphs(base: TypefaceJson, patch: TypefaceJson): TypefaceJson {
+  return {
+    ...base,
+    glyphs: { ...base.glyphs, ...patch.glyphs },
+  }
+}
+
 /**
- * 加载支持中文的 Font — 优先本地 JSON，回退 opentype 动态子集
+ * 加载支持中文的 Font — 优先本地 JSON，缺失字从本地 WOFF 子集补全
  */
 export async function loadChineseFont(requiredChars: string): Promise<Font> {
   const chars = [...new Set((requiredChars + '□').split(''))].filter(Boolean).join('')
@@ -144,17 +161,39 @@ export async function loadChineseFont(requiredChars: string): Promise<Font> {
     return cachedFont
   }
 
-  for (const url of FONT_CANDIDATES) {
-    const font = await loadJsonFont(url)
-    if (font && fontHasAllChars(font, chars)) {
-      cachedFont = font
-      cachedGlyphSet = new Set(chars.split(''))
-      return font
+  let typeface: TypefaceJson | null = null
+
+  for (const url of FONT_JSON_CANDIDATES) {
+    const json = await loadTypefaceJson(url)
+    if (json) {
+      typeface = json
+      break
     }
   }
 
-  const otFont = await loadOpentypeFont()
-  const typeface = buildTypefaceFromOpentype(otFont, chars)
+  const missing = typeface
+    ? [...chars].filter((c) => !typeface!.glyphs[c])
+    : [...chars]
+
+  if (missing.length > 0) {
+    const otFont = await loadOpentypeFromUrls(WOFF_CANDIDATES)
+    if (!otFont) {
+      throw new Error(
+        `missing glyphs (${missing.length}): run npm run generate:poem-font — ${missing.slice(0, 8).join('')}`,
+      )
+    }
+    const subset = buildTypefaceFromOpentype(otFont, missing.join(''))
+    const stillMissing = missing.filter((c) => !subset.glyphs[c])
+    if (stillMissing.length > 0) {
+      throw new Error(`font subset incomplete: ${stillMissing.join('')}`)
+    }
+    typeface = typeface ? mergeGlyphs(typeface, subset) : subset
+  }
+
+  if (!typeface || !fontHasAllChars(new FontLoader().parse(typeface), chars)) {
+    throw new Error('chinese font load failed')
+  }
+
   const loader = new FontLoader()
   cachedFont = loader.parse(typeface)
   cachedGlyphSet = new Set(chars.split(''))

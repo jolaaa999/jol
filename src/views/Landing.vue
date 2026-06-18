@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useDandelionPhysics } from '@/composables/useDandelionPhysics'
+import { useDandelionThreeScene } from '@/composables/useDandelionThreeScene'
 import PoemUnlock from '@/components/PoemUnlock.vue'
 
 const dandelionCanvasRef = ref<HTMLCanvasElement | null>(null)
 const router = useRouter()
 const showUnlock = ref(false)
 
-const { phase, fadeOpacity, onPointerMove, onPointerLeave } = useDandelionPhysics(dandelionCanvasRef, {
-  blowDuration: 1500,
-  fadeDuration: 600,
+const { phase, fadeOpacity, onPointerMove, onPointerLeave } = useDandelionThreeScene(dandelionCanvasRef, {
+  spreadDuration: 2800,
   onTransitionComplete: () => {
     showUnlock.value = true
   },
@@ -22,7 +21,7 @@ function onUnlockComplete(): void {
 
 const showHint = computed(() => phase.value === 'idle' && !showUnlock.value)
 const overlayOpacity = computed(() =>
-  phase.value === 'fading' && !showUnlock.value ? 1 - fadeOpacity.value : 0,
+  phase.value === 'spreading' && !showUnlock.value ? 1 - fadeOpacity.value : 0,
 )
 </script>
 
