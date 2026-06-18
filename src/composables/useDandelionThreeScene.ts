@@ -107,7 +107,6 @@ export function useDandelionThreeScene(
   let canvasH = 0
   let headSpread = 120
   let headPx = { x: 0, y: 0 }
-  let rootPx = { x: 0, y: 0 }
 
   function buildScene(width: number, height: number): void {
     canvasW = width
@@ -116,7 +115,6 @@ export function useDandelionThreeScene(
     const { cx, groundY, headY } = getLandingLayout(width, height)
     headSpread = Math.min(width, height) * 0.32
     headPx = { x: cx, y: groundY - (STEM_NODES - 1) * ((groundY - headY) / (STEM_NODES - 1)) }
-    rootPx = { x: cx, y: groundY }
 
     engine = new PhysicsEngine({
       gravity: { x: 0, y: 0.05 },
@@ -384,7 +382,7 @@ export function useDandelionThreeScene(
       if (i <= headEngineId) {
         const nodeFactor = i / (STEM_NODES - 1)
         const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.002, 3)
-        const gust = computeMouseWind(mouseVec, head, hoverRadius, 0.9 + hoverPull)
+        const gust = computeMouseWind(mouseVec, head, hoverRadius, (0.9 + hoverPull) * gustPulse)
         const fs = dt * 0.004
         return {
           x: (gust.x * nodeFactor * 1.1 + ambient.x * 0.06 * nodeFactor) * fs,
@@ -393,7 +391,7 @@ export function useDandelionThreeScene(
       }
 
       const wind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
-      const mouseWind = computeMouseWind(mouseVec, p, headSpread * 0.7, 0.6 + hoverPull)
+      const mouseWind = computeMouseWind(mouseVec, p, headSpread * 0.7, (0.6 + hoverPull) * gustPulse)
       const fs = dt * 0.0032
       return {
         x: (wind.x * 0.32 + mouseWind.x) * fs,
@@ -512,6 +510,7 @@ export function useDandelionThreeScene(
     if (w > 0 && h > 0 && (w !== canvasW || h !== canvasH)) {
       canvasW = w
       canvasH = h
+      renderer!.setPixelRatio(dpr)
       renderer!.setSize(w, h, false)
       if (camera) {
         camera.left = -w / 2
