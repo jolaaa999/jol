@@ -31,6 +31,7 @@ interface GroundTile {
   isCorrect: boolean
   blankGlobalIndex: number | null
   picked: boolean
+  sizeRatio: number
 }
 
 interface Particle {
@@ -48,7 +49,10 @@ const CHAR_SIZE = 0.52
 const CHAR_DEPTH = 0.08
 const BG_CHAR_SIZE = 0.38
 const GROUND_Y = -3.2
-const SCATTER_R = 8
+const SCATTER_R = 11
+const GROUND_CHAR_MIN = 0.32
+const GROUND_CHAR_MAX = 0.84
+const GROUND_EXTRA_COUNT = 56
 const BG_Z = -14
 const BG_CELL = 2.35
 
@@ -252,11 +256,23 @@ export function usePoemScene(
     }
   }
 
+  function randomGroundCharSize(isCorrect: boolean): number {
+    if (isCorrect) {
+      return CHAR_SIZE * (0.78 + Math.random() * 0.38)
+    }
+    const t = Math.random()
+    const skew = t * t
+    return GROUND_CHAR_MIN + skew * (GROUND_CHAR_MAX - GROUND_CHAR_MIN)
+  }
+
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
 
-    const distractors = collectDistractorChars(layout)
+    const distractors = [
+      ...collectDistractorChars(layout),
+      ...buildBackgroundCharPool(layout),
+    ]
     const correctChars = layout.slots
       .filter((s) => s.isBlank)
       .map((s) => ({ char: s.char, idx: s.globalIndex }))
@@ -267,11 +283,8 @@ export function usePoemScene(
       pool.push({ char: c.char, isCorrect: true, blankIdx: c.idx })
     }
 
-    const extraCount = Math.max(correctChars.length * 2, 6)
-    for (let i = 0; i < extraCount; i++) {
+    for (let i = 0; i < GROUND_EXTRA_COUNT; i++) {
       const char = distractors[Math.floor(Math.random() * distractors.length)]
-      const dup = pool.some((p) => p.char === char && p.isCorrect)
-      if (dup && Math.random() > 0.3) continue
       pool.push({ char, isCorrect: false, blankIdx: null })
     }
 
@@ -279,14 +292,16 @@ export function usePoemScene(
 
     for (const item of pool) {
       const angle = Math.random() * Math.PI * 2
-      const r = 3 + Math.random() * SCATTER_R
+      const r = 2.5 + Math.sqrt(Math.random()) * SCATTER_R
       const x = Math.cos(angle) * r
       const z = Math.sin(angle) * r
-      const y = GROUND_Y + (Math.random() - 0.5) * 0.15
+      const y = GROUND_Y + (Math.random() - 0.5) * 0.35
+      const charSize = randomGroundCharSize(item.isCorrect)
+      const sizeRatio = charSize / CHAR_SIZE
 
-      const mesh = makeTextMesh(font, item.char, createGroundMaterial())
+      const mesh = makeTextMesh(font, item.char, createGroundMaterial(), charSize)
       mesh.position.set(x, y, z)
-      mesh.rotation.set(0, 0, (Math.random() - 0.5) * 0.04)
+      mesh.rotation.set(0, 0, (Math.random() - 0.5) * 0.05)
       mesh.userData.groundChar = true
       groundGroup.add(mesh)
 
@@ -296,6 +311,7 @@ export function usePoemScene(
         isCorrect: item.isCorrect,
         blankGlobalIndex: item.blankIdx,
         picked: false,
+        sizeRatio,
       })
     }
   }
@@ -445,10 +461,14 @@ export function usePoemScene(
 
     tile.mesh.visible = false
 
-    const flying = makeTextMesh(font, tile.char, createGroundMaterial())
+    const startScale = new THREE.Vector3(tile.sizeRatio, tile.sizeRatio, tile.sizeRatio)
+    const flying = makeTextMesh(font, tile.char, createGroundMaterial(), CHAR_SIZE)
     flying.position.copy(startPos)
     flying.rotation.copy(startRot)
+    flying.scale.copy(startScale)
     scene!.add(flying)
+
+    const targetScale = new THREE.Vector3(1, 1, 1)
 
     const target = slot.targetPos.clone().add(poemGroup.position)
     const mid = new THREE.Vector3(
@@ -472,6 +492,7 @@ export function usePoemScene(
         )
         flying.rotation.x = THREE.MathUtils.lerp(startRot.x, 0, t)
         flying.rotation.z = THREE.MathUtils.lerp(startRot.z, 0, t)
+        flying.scale.lerpVectors(startScale, targetScale, t)
       },
       onComplete: () => {
         scene!.remove(flying)
