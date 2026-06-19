@@ -16,7 +16,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
   let lastTime = 0
 
   /** 种子粒子数量 */
-  const SEED_COUNT = 148
+  const SEED_COUNT = 10048
   /** 花头粒子索引 */
   const HEAD_ID = 0
 

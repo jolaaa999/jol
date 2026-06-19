@@ -100,7 +100,7 @@ const SUN = { x: -0.78, y: -0.62, intensity: 1.15 }
 /** 茎秆节点数量 */
 const STEM_NODES = 8
 /** 绒球种子数量 */
-const SEED_COUNT = 1280
+const SEED_COUNT = 10280
 /** 风迹粒子最大数量 */
 const TRAIL_MAX = 28
 /** 最大设备像素比 */

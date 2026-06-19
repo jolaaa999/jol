@@ -56,6 +56,14 @@ const MAX_DPR = 2
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 /** 默认吹散铺满屏幕时长 (ms) */
 const DEFAULT_SPREAD_MS = 2800
+/** 茎秆受鼠标风强度倍率 */
+const MOUSE_WIND_STEM = 0.32
+/** 绒球受鼠标风强度倍率 */
+const MOUSE_WIND_FLUFF = 0.18
+/** 无鼠标时环境风强度倍率（仅轻微摇曳） */
+const AMBIENT_WIND_IDLE = 0.018
+/** 有鼠标时环境风强度倍率 */
+const AMBIENT_WIND_HOVER = 0.03
 
 /** 与 Landing.vue CSS 一致的麦黄田园渐变，供 WebGL 不透明渲染（Bloom 会盖住下层 CSS） */
 function createPastoralGradientTexture(width: number, height: number): THREE.CanvasTexture {
@@ -191,6 +199,8 @@ export function useDandelionThreeScene(
   let mouse: Vec2 | null = null
   /** 上一帧鼠标位置 */
   let prevMouse: Vec2 | null = null
+  /** 鼠标移动速度（像素/帧，用于静止时削弱风力） */
+  let mouseSpeed = 0
   /** 花头物理粒子索引 */
   let headEngineId = 0
   /** requestAnimationFrame 句柄 */
@@ -219,7 +229,7 @@ export function useDandelionThreeScene(
 
     engine = new PhysicsEngine({
       gravity: { x: 0, y: 0 },
-      globalDamping: 0.988,
+      globalDamping: 0.993,
       substeps: 3,
     })
 
@@ -277,7 +287,7 @@ export function useDandelionThreeScene(
         b: engineId,
         restLength: dist,
         stiffness: 0.045 + Math.random() * 0.025,
-        damping: 0.016,
+        damping: 0.028,
       })
 
       fluffParticles.push({
@@ -483,36 +493,56 @@ export function useDandelionThreeScene(
     }
   }
 
-  /** 静止态物理 — 风场与鼠标扰动 */
+  /** 静止态物理 — 无鼠标时仅轻微环境风，有鼠标时按移动速度施加扰动 */
   function updateIdlePhysics(time: number, dt: number): void {
     if (!engine) return
     const head = engine.particles[headEngineId]
-    const mouseVec = mouse ?? { x: head.x, y: head.y }
-    const headDist = Math.hypot(mouseVec.x - head.x, mouseVec.y - head.y)
+    const hasMouse = mouse !== null
+    const headDist = hasMouse
+      ? Math.hypot(mouse!.x - head.x, mouse!.y - head.y)
+      : Infinity
     const hoverRadius = headSpread * 0.95
-    const hoverPull = headDist < hoverRadius ? Math.pow(1 - headDist / hoverRadius, 1.5) : 0
-    const gustPulse = 0.35 + Math.max(0, Math.sin(time * 0.0016))
+    const hoverPull = hasMouse && headDist < hoverRadius
+      ? Math.pow(1 - headDist / hoverRadius, 1.5)
+      : 0
+    /** 静止鼠标时趋近 0.12，快速划过时趋近 1 */
+    const moveFactor = hasMouse ? Math.min(1, 0.12 + mouseSpeed * 0.06) : 0
+    const ambientScale = hasMouse ? AMBIENT_WIND_HOVER : AMBIENT_WIND_IDLE
+    const fsStem = dt * 0.003
+    const fsFluff = dt * 0.0022
 
     engine.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
 
       if (i <= headEngineId) {
         const nodeFactor = i / (STEM_NODES - 1)
-        const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.002, 3)
-        const gust = computeMouseWind(mouseVec, head, hoverRadius, (0.9 + hoverPull) * gustPulse)
-        const fs = dt * 0.004
+        const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.0018, 2)
+        const gust = hasMouse
+          ? computeMouseWind(
+              mouse!,
+              head,
+              hoverRadius,
+              (MOUSE_WIND_STEM + hoverPull * 0.12) * moveFactor,
+            )
+          : { x: 0, y: 0 }
         return {
-          x: (gust.x * nodeFactor * 1.1 + ambient.x * 0.06 * nodeFactor) * fs,
-          y: (gust.y * nodeFactor * 0.85 + ambient.y * 0.04 * nodeFactor) * fs,
+          x: (gust.x * nodeFactor * 0.65 + ambient.x * ambientScale * nodeFactor) * fsStem,
+          y: (gust.y * nodeFactor * 0.55 + ambient.y * ambientScale * nodeFactor) * fsStem,
         }
       }
 
-      const wind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.005, 3)
-      const mouseWind = computeMouseWind(mouseVec, p, headSpread * 0.7, (0.6 + hoverPull) * gustPulse)
-      const fs = dt * 0.0032
+      const wind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.0035, 2)
+      const mouseWind = hasMouse
+        ? computeMouseWind(
+            mouse!,
+            p,
+            headSpread * 0.6,
+            (MOUSE_WIND_FLUFF + hoverPull * 0.1) * moveFactor,
+          )
+        : { x: 0, y: 0 }
       return {
-        x: (wind.x * 0.32 + mouseWind.x) * fs,
-        y: (wind.y * 0.18 + mouseWind.y) * fs,
+        x: (wind.x * ambientScale * 3.2 + mouseWind.x) * fsFluff,
+        y: (wind.y * ambientScale * 2.4 + mouseWind.y) * fsFluff,
       }
     })
   }
@@ -651,6 +681,7 @@ export function useDandelionThreeScene(
     }
 
     if (phase.value === 'idle') {
+      mouseSpeed *= 0.82
       updateIdlePhysics(timestamp, dt)
     } else if (phase.value === 'blowing' || phase.value === 'spreading') {
       updateDetachedPhysics(timestamp, dt)
@@ -683,6 +714,7 @@ export function useDandelionThreeScene(
 
     prevMouse = mouse ?? { x, y }
     mouse = { x, y }
+    mouseSpeed = Math.hypot(e.movementX, e.movementY)
 
     if (phase.value !== 'idle' || !engine) return
 
@@ -728,6 +760,7 @@ export function useDandelionThreeScene(
   function onPointerLeave(): void {
     mouse = null
     prevMouse = null
+    mouseSpeed = 0
   }
 
   /** 释放 GPU 资源 */
