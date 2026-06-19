@@ -143,9 +143,8 @@ function enterBlog(): void {
       />
 
       <div class="entry__menu-drawer">
-        <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer />
-        <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer />
-
+        <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
+        <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
         <aside class="entry__menu-panel" data-menu-panel>
           <button type="button" class="entry__menu-close" @click="closeMenu">
             <span class="entry__menu-close-mask">
@@ -449,38 +448,43 @@ function enterBlog(): void {
   position: absolute;
   top: 0;
   right: 0;
+  width: clamp(17rem, 34vw, 24rem);
   height: 100%;
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
+  overflow: hidden;
+  pointer-events: none;
 }
 
-.entry__menu-layer {
-  flex-shrink: 0;
+.entry__menu-layer,
+.entry__menu-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
   height: 100%;
+  transform-origin: right center;
   will-change: transform;
 }
 
 .entry__menu-layer--1 {
   width: clamp(1.75rem, 3.2vw, 2.75rem);
   background: #0a0e1a;
+  z-index: 1;
 }
 
 .entry__menu-layer--2 {
   width: clamp(2.75rem, 5vw, 4.25rem);
   background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
+  z-index: 2;
 }
 
 .entry__menu-panel {
-  flex-shrink: 0;
-  width: clamp(17rem, 34vw, 24rem);
-  height: 100%;
+  width: 100%;
+  z-index: 3;
   padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
   background: #fafafa;
   color: #0a0a0b;
   display: flex;
   flex-direction: column;
-  will-change: transform;
+  pointer-events: auto;
   box-shadow: -20px 0 48px rgba(0, 0, 0, 0.14);
 }
 
@@ -630,7 +634,7 @@ function enterBlog(): void {
 }
 
 @media (max-width: 640px) {
-  .entry__menu-panel {
+  .entry__menu-drawer {
     width: min(88vw, 20rem);
   }
 
