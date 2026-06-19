@@ -445,10 +445,14 @@ function enterBlog(): void {
 }
 
 .entry__menu-drawer {
+  /* 抽屉总宽 = 两层色带 + 内容面板，锚定在视口右侧 */
+  --menu-layer-1-w: clamp(1.75rem, 3.2vw, 2.75rem);
+  --menu-layer-2-w: clamp(2.75rem, 5vw, 4.25rem);
+  --menu-panel-w: clamp(17rem, 34vw, 24rem);
   position: absolute;
   top: 0;
   right: 0;
-  width: clamp(17rem, 34vw, 24rem);
+  width: calc(var(--menu-layer-1-w) + var(--menu-layer-2-w) + var(--menu-panel-w));
   height: 100%;
   overflow: hidden;
   pointer-events: none;
@@ -458,26 +462,29 @@ function enterBlog(): void {
 .entry__menu-panel {
   position: absolute;
   top: 0;
-  right: 0;
   height: 100%;
-  transform-origin: right center;
+  /* 从抽屉左缘向外展开，而非从浏览器右缘滑入 */
+  transform-origin: left center;
   will-change: transform;
 }
 
 .entry__menu-layer--1 {
-  width: clamp(1.75rem, 3.2vw, 2.75rem);
+  left: 0;
+  width: var(--menu-layer-1-w);
   background: #0a0e1a;
   z-index: 1;
 }
 
 .entry__menu-layer--2 {
-  width: clamp(2.75rem, 5vw, 4.25rem);
+  left: var(--menu-layer-1-w);
+  width: var(--menu-layer-2-w);
   background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
   z-index: 2;
 }
 
 .entry__menu-panel {
-  width: 100%;
+  left: calc(var(--menu-layer-1-w) + var(--menu-layer-2-w));
+  width: var(--menu-panel-w);
   z-index: 3;
   padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
   background: #fafafa;
@@ -635,15 +642,9 @@ function enterBlog(): void {
 
 @media (max-width: 640px) {
   .entry__menu-drawer {
-    width: min(88vw, 20rem);
-  }
-
-  .entry__menu-layer--1 {
-    width: 1.25rem;
-  }
-
-  .entry__menu-layer--2 {
-    width: 2rem;
+    --menu-layer-1-w: 1.25rem;
+    --menu-layer-2-w: 2rem;
+    --menu-panel-w: min(88vw, 20rem);
   }
 }
 </style>
