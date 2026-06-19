@@ -93,32 +93,37 @@ const BG_CHAR_SIZE = 0.38
 const POEM_CENTER_Y = 0.85
 /** 竖排各列垂直错位幅度 — 多列时高低参差 */
 const COL_Y_STAGGER_AMP = 1.75
-/** 圆柱轴心 Y（与 poemGroup 偏移对齐） */
-const CYLINDER_AXIS_Y = POEM_CENTER_Y + 0.8
-/** 背景字圆柱外径 */
-const CYLINDER_BG_RADIUS = 9.6
-/** 干扰字圆柱内径 — 大字靠内圈、更靠近观者 */
-const CYLINDER_GROUND_RADIUS_NEAR = 4.4
-/** 干扰字圆柱外径 — 小字靠外圈 */
-const CYLINDER_GROUND_RADIUS_FAR = 7.8
-/** 正确答案圆柱半径 — 靠前半球 */
-const CYLINDER_CORRECT_RADIUS = 5.0
-/** 圆柱纵向半高 */
-const CYLINDER_HALF_HEIGHT = 5.0
-/** 诗文轴心最小避让半径 */
-const CYLINDER_POEM_CLEAR = 3.0
+/** 凸弧面包围 — 非 360°，仅相机前方扇形（约 138°） */
+const ARC_SPAN = 2.42
+/** 弧面轴心 Y */
+const ARC_AXIS_Y = POEM_CENTER_Y + 0.8
+/** 背景字弧面半径 */
+const ARC_BG_RADIUS = 9.4
+/** 干扰字弧面半径 — 内（大）~ 外（小） */
+const ARC_GROUND_RADIUS_NEAR = 4.5
+const ARC_GROUND_RADIUS_FAR = 7.6
+/** 正确答案弧面半径 */
+const ARC_CORRECT_RADIUS = 5.1
+/** 弧面纵向半高 */
+const ARC_HALF_HEIGHT = 5.0
+/** 中心诗区角向/纵向避让（归一化 u,v） */
+const ARC_CENTER_CLEAR_U = 0.22
+const ARC_CENTER_CLEAR_V = 0.26
+/** 边缘字号缩放 — 中心 1.0，两侧缩小 */
+const ARC_EDGE_SCALE_BG = 0.5
+const ARC_EDGE_SCALE_GROUND = 0.58
+/** 背景网格密度 */
+const ARC_BG_COLS = 12
+const ARC_BG_ROWS = 10
+/** 弧面轻微呼吸摆动（弧度） */
+const ARC_SWAY_AMP = 0.028
+const ARC_SWAY_SPEED = 0.11
 /** 地面字最小尺寸 */
 const GROUND_CHAR_MIN = 0.32
 /** 地面字最大尺寸 */
 const GROUND_CHAR_MAX = 0.84
 /** 干扰字最小间距（世界坐标） */
 const GROUND_CHAR_MIN_GAP = 0.72
-/** 背景字角向步进（弧度） */
-const CYLINDER_BG_ANGLE_STEP = 0.36
-/** 背景字纵向步进 */
-const CYLINDER_BG_Y_STEP = 1.42
-/** 背景圆柱慢速自转（弧度/秒） */
-const CYLINDER_BG_ROTATION_SPEED = 0.018
 /** 中心诗文 renderOrder — 始终压在最上层 */
 const POEM_RENDER_ORDER = 1200
 /** 解体粒子每个顶点额外子粒子数 */
@@ -332,7 +337,48 @@ export function usePoemScene(
     filledCount.value = 0
   }
 
-  /** 构建圆柱面背景字阵 — 绕中心诗竖轴排列 */
+  /** 弧面朝向系数：0 = 弧缘，1 = 弧心（正对相机） */
+  function arcFrontness(theta: number, vNorm = 0): number {
+    const half = ARC_SPAN * 0.5
+    const h = 1 - Math.abs(theta) / half
+    const vert = 1 - Math.abs(vNorm) * 0.24
+    return THREE.MathUtils.clamp(h * vert, 0, 1)
+  }
+
+  /** 弧面坐标 */
+  function arcXYZ(radius: number, theta: number, y: number): THREE.Vector3 {
+    return new THREE.Vector3(radius * Math.sin(theta), y, radius * Math.cos(theta))
+  }
+
+  /** 放置于凸弧面：透视缩放 + 面向轴心 */
+  function placeOnArcSurface(
+    mesh: THREE.Mesh,
+    radius: number,
+    theta: number,
+    y: number,
+    vNorm: number,
+    edgeScale: number,
+  ): void {
+    const front = arcFrontness(theta, vNorm)
+    const scale = THREE.MathUtils.lerp(edgeScale, 1, front)
+
+    mesh.position.copy(arcXYZ(radius, theta, y))
+    mesh.rotation.set(
+      (Math.random() - 0.5) * 0.045 * (1 - front),
+      theta + Math.PI,
+      (Math.random() - 0.5) * 0.035 * (1 - front),
+    )
+    mesh.scale.setScalar(scale)
+
+    mesh.userData.arcTheta = theta
+    mesh.userData.arcRadius = radius
+    mesh.userData.baseY = y
+    mesh.userData.baseScale = scale
+    mesh.userData.frontness = front
+    mesh.userData.vNorm = vNorm
+  }
+
+  /** 构建凸弧面背景字阵 — 前方扇形网格，中心放大、边缘透视 */
   function buildBackgroundBoard(font: Font, layout: PoemLayout): void {
     for (const bg of backgroundChars) {
       bg.mesh.geometry.dispose()
@@ -346,32 +392,31 @@ export function usePoemScene(
     if (!pool.length) return
 
     let poolIdx = 0
-    const axisY = CYLINDER_AXIS_Y
-    const ySpan = CYLINDER_HALF_HEIGHT * 2
-    const rings = Math.max(7, Math.round(ySpan / CYLINDER_BG_Y_STEP))
-    const perRing = Math.max(14, Math.round((Math.PI * 2) / CYLINDER_BG_ANGLE_STEP))
+    const axisY = ARC_AXIS_Y
+    const halfArc = ARC_SPAN * 0.5
 
-    for (let ring = 0; ring < rings; ring++) {
-      const ringT = rings > 1 ? ring / (rings - 1) : 0.5
-      const y = axisY + (ringT - 0.5) * ySpan + (Math.random() - 0.5) * 0.18
-      const ringTwist = ring * 0.19
+    for (let row = 0; row < ARC_BG_ROWS; row++) {
+      const v = ARC_BG_ROWS > 1 ? (row / (ARC_BG_ROWS - 1)) * 2 - 1 : 0
 
-      for (let ti = 0; ti < perRing; ti++) {
-        const theta =
-          (ti / perRing) * Math.PI * 2 + ringTwist + (Math.random() - 0.5) * 0.12
-        const char = pool[poolIdx % pool.length]!
-        poolIdx++
+      for (let col = 0; col < ARC_BG_COLS; col++) {
+        const u = ARC_BG_COLS > 1 ? (col / (ARC_BG_COLS - 1)) * 2 - 1 : 0
 
-        const shellR = CYLINDER_BG_RADIUS + (Math.random() - 0.5) * 0.28
-        const frontness = hemisphereFrontness(theta)
+        if (Math.abs(u) < ARC_CENTER_CLEAR_U && Math.abs(v) < ARC_CENTER_CLEAR_V) continue
+
+        const theta = u * halfArc * 0.94 + (Math.random() - 0.5) * 0.07
+        const y = axisY + v * ARC_HALF_HEIGHT * 1.02 + (Math.random() - 0.5) * 0.14
+        const front = arcFrontness(theta, v)
+        const shellR = ARC_BG_RADIUS + (1 - front) * 0.75
+
         const mat = createBackgroundMaterial()
         mat.transparent = true
-        mat.opacity = 0.32 + frontness * 0.52
-        mat.depthWrite = frontness > 0.38
+        mat.opacity = 0.28 + front * 0.58
+        mat.depthWrite = front > 0.42
 
-        const mesh = makeTextMesh(font, char, mat, BG_CHAR_SIZE, CHAR_DEPTH * 0.6)
-        placeOnCylinder(mesh, shellR, theta, y)
-        mesh.renderOrder = Math.round(frontness * 80)
+        const mesh = makeTextMesh(font, pool[poolIdx % pool.length]!, mat, BG_CHAR_SIZE, CHAR_DEPTH * 0.6)
+        poolIdx++
+        placeOnArcSurface(mesh, shellR, theta, y, v, ARC_EDGE_SCALE_BG)
+        mesh.renderOrder = Math.round(front * 90)
         backgroundGroup.add(mesh)
         backgroundChars.push({
           mesh,
@@ -380,30 +425,6 @@ export function usePoemScene(
         })
       }
     }
-  }
-
-  /** 半球朝向系数：0 = 背面，1 = 正面（朝相机） */
-  function hemisphereFrontness(theta: number): number {
-    return THREE.MathUtils.clamp((Math.cos(theta) + 1) * 0.5, 0, 1)
-  }
-
-  /** 圆柱面坐标 → 世界位置，并让字面向轴心 */
-  function placeOnCylinder(mesh: THREE.Mesh, radius: number, theta: number, y: number): void {
-    mesh.position.set(radius * Math.sin(theta), y, radius * Math.cos(theta))
-    mesh.rotation.set(
-      (Math.random() - 0.5) * 0.05,
-      theta + Math.PI,
-      (Math.random() - 0.5) * 0.04,
-    )
-    mesh.userData.cylinderTheta = theta
-    mesh.userData.cylinderRadius = radius
-    mesh.userData.baseY = y
-    mesh.userData.frontness = hemisphereFrontness(theta)
-  }
-
-  /** 圆柱面坐标 */
-  function cylinderXYZ(radius: number, theta: number, y: number): THREE.Vector3 {
-    return new THREE.Vector3(radius * Math.sin(theta), y, radius * Math.cos(theta))
   }
 
   /** 单字材质流光闪烁（背景字 / 干扰字共用） */
@@ -459,35 +480,41 @@ export function usePoemScene(
     )
   }
 
-  /** 按字号映射圆柱半径 — 越大越靠内圈（更靠近观者） */
-  function sizeToCylinderRadius(charSize: number, isCorrect: boolean): number {
-    if (isCorrect) return CYLINDER_CORRECT_RADIUS
+  /** 按字号映射弧面半径 — 大字更靠内弧 */
+  function sizeToArcRadius(charSize: number, isCorrect: boolean): number {
+    if (isCorrect) return ARC_CORRECT_RADIUS
     const t = normalizeGroundCharSize(charSize)
-    return THREE.MathUtils.lerp(CYLINDER_GROUND_RADIUS_FAR, CYLINDER_GROUND_RADIUS_NEAR, t)
+    return THREE.MathUtils.lerp(ARC_GROUND_RADIUS_FAR, ARC_GROUND_RADIUS_NEAR, t)
   }
 
-  /** 圆柱面分层：前后透明度、renderOrder */
+  /** 弧面分层：透视缩放、透明度、renderOrder */
   function applyGroundDepthLayering(): void {
     for (const tile of groundTiles) {
-      const theta = tile.mesh.userData.cylinderTheta as number
-      const radius = tile.mesh.userData.cylinderRadius as number
+      const theta = tile.mesh.userData.arcTheta as number
+      const radius = tile.mesh.userData.arcRadius as number
       const y = tile.mesh.userData.baseY as number
+      const vNorm = (tile.mesh.userData.vNorm as number) ?? 0
       const charSize = tile.sizeRatio * CHAR_SIZE
-      const frontness = hemisphereFrontness(theta)
+      const front = arcFrontness(theta, vNorm)
       const sizeT = normalizeGroundCharSize(charSize)
+      const scale =
+        THREE.MathUtils.lerp(ARC_EDGE_SCALE_GROUND, 1, front) *
+        (tile.isCorrect ? 1 : 0.88 + sizeT * 0.12)
 
-      tile.mesh.position.copy(cylinderXYZ(radius, theta, y))
+      tile.mesh.position.copy(arcXYZ(radius, theta, y))
+      tile.mesh.scale.setScalar(scale)
+      tile.mesh.userData.baseScale = scale
 
       if (tile.isCorrect) {
-        tile.mesh.renderOrder = 900 + Math.round(frontness * 70)
+        tile.mesh.renderOrder = 900 + Math.round(front * 80)
         continue
       }
 
-      tile.mesh.renderOrder = 100 + Math.round(frontness * 420 + sizeT * 340)
+      tile.mesh.renderOrder = 100 + Math.round(front * 400 + sizeT * 360)
       const mat = tile.mesh.material as THREE.MeshStandardMaterial
       mat.transparent = true
-      mat.opacity = THREE.MathUtils.lerp(0.58, 1.0, frontness * 0.55 + sizeT * 0.45)
-      mat.depthWrite = frontness > 0.32 && sizeT > 0.42
+      mat.opacity = THREE.MathUtils.lerp(0.55, 1.0, front * 0.6 + sizeT * 0.4)
+      mat.depthWrite = front > 0.35 && sizeT > 0.4
     }
 
     groundGroup.children.sort((a, b) => a.renderOrder - b.renderOrder)
@@ -508,33 +535,32 @@ export function usePoemScene(
     return GROUND_CHAR_MIN + skew * (GROUND_CHAR_MAX - GROUND_CHAR_MIN)
   }
 
-  /** 在圆柱面上选取互不重叠的位置 */
-  function pickCylinderSlot(
+  /** 在凸弧面上选取互不重叠的位置（仅前方扇形） */
+  function pickArcSlot(
     charRadius: number,
     placed: PlacedGroundSlot[],
     charSize: number,
     isCorrect: boolean,
-  ): { theta: number; y: number; radius: number } | null {
-    const radius = sizeToCylinderRadius(charSize, isCorrect)
+  ): { theta: number; y: number; radius: number; vNorm: number } | null {
+    const radius = sizeToArcRadius(charSize, isCorrect)
     const sizeT = normalizeGroundCharSize(charSize)
-    const axisY = CYLINDER_AXIS_Y
+    const axisY = ARC_AXIS_Y
+    const halfArc = ARC_SPAN * 0.5
 
     for (let attempt = 0; attempt < 80; attempt++) {
-      let theta: number
-      if (isCorrect) {
-        theta = (Math.random() - 0.5) * Math.PI * 0.95
-      } else {
-        const spread = Math.PI * (1.05 - sizeT * 0.35)
-        theta = (Math.random() - 0.5) * spread
+      const spread = isCorrect ? 0.88 : 0.72 + sizeT * 0.22
+      const theta = (Math.random() - 0.5) * ARC_SPAN * spread
+      const vNorm = (Math.random() - 0.5) * 1.85
+      const y = axisY + vNorm * ARC_HALF_HEIGHT + (Math.random() - 0.5) * 0.12
+
+      if (Math.abs(theta) < ARC_CENTER_CLEAR_U * halfArc * 1.1 && Math.abs(vNorm) < ARC_CENTER_CLEAR_V * 1.2) {
+        continue
       }
 
-      const y = axisY + (Math.random() - 0.5) * CYLINDER_HALF_HEIGHT * 2
-      if (radius < CYLINDER_POEM_CLEAR && Math.abs(y - axisY) < 2.4) continue
-
-      const pos = cylinderXYZ(radius, theta, y)
+      const pos = arcXYZ(radius, theta, y)
       let ok = true
       for (const p of placed) {
-        const other = cylinderXYZ(p.radius, p.theta, p.y)
+        const other = arcXYZ(p.radius, p.theta, p.y)
         const dx = pos.x - other.x
         const dy = pos.y - other.y
         const dz = pos.z - other.z
@@ -544,14 +570,15 @@ export function usePoemScene(
           break
         }
       }
-      if (ok) return { theta, y, radius }
+      if (ok) return { theta, y, radius, vNorm }
     }
     return null
   }
 
-  /** 构建圆柱面散落字块 — 干扰字绕轴排列 */
+  /** 构建凸弧面散落字块 */
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
+    groundGroup.rotation.y = 0
     groundTiles.length = 0
 
     const correctChars = layout.slots
@@ -575,7 +602,7 @@ export function usePoemScene(
     for (const item of pool) {
       const charSize = randomGroundCharSize(item.isCorrect)
       const charRadius = charSize * 0.55
-      const slot = pickCylinderSlot(charRadius, placed, charSize, item.isCorrect)
+      const slot = pickArcSlot(charRadius, placed, charSize, item.isCorrect)
       if (!slot) continue
 
       placed.push({
@@ -588,7 +615,7 @@ export function usePoemScene(
 
       const material = item.isCorrect ? createGroundMaterial() : createBackgroundMaterial()
       const mesh = makeTextMesh(font, item.char, material, charSize)
-      placeOnCylinder(mesh, slot.radius, slot.theta, slot.y)
+      placeOnArcSurface(mesh, slot.radius, slot.theta, slot.y, slot.vNorm, ARC_EDGE_SCALE_GROUND)
       mesh.userData.groundChar = true
       mesh.userData.isDistractor = !item.isCorrect
       groundGroup.add(mesh)
@@ -986,20 +1013,25 @@ export function usePoemScene(
     }
 
     if (phase.value === 'playing' || phase.value === 'dissolving') {
-      backgroundGroup.rotation.y = clock.elapsedTime * CYLINDER_BG_ROTATION_SPEED
+      const sway = Math.sin(clock.elapsedTime * ARC_SWAY_SPEED) * ARC_SWAY_AMP
+      backgroundGroup.rotation.y = sway
+      groundGroup.rotation.y = sway * 0.35
+
       updateBackgroundSparkle(clock.elapsedTime)
       updateGroundDistractorSparkle(clock.elapsedTime)
       groundGroup.children.forEach((c, i) => {
         if (!c.visible) return
-        const theta = c.userData.cylinderTheta as number | undefined
-        const radius = c.userData.cylinderRadius as number | undefined
+        const theta = c.userData.arcTheta as number | undefined
+        const radius = c.userData.arcRadius as number | undefined
         const baseY = (c.userData.baseY as number | undefined) ?? c.position.y
+        const baseScale = (c.userData.baseScale as number | undefined) ?? 1
         if (theta === undefined || radius === undefined) return
 
-        const frontness = hemisphereFrontness(theta)
-        const bobAmp = 0.01 + frontness * 0.024
+        const front = (c.userData.frontness as number | undefined) ?? 0.5
+        const bobAmp = 0.008 + front * 0.02
         const y = baseY + Math.sin(clock.elapsedTime * 0.8 + i * 0.37) * bobAmp
         c.position.set(radius * Math.sin(theta), y, radius * Math.cos(theta))
+        c.scale.setScalar(baseScale)
       })
     }
 
