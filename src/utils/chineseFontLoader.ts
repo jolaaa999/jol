@@ -29,10 +29,8 @@ export interface TypefaceJson {
 /** 预生成 typeface JSON 候选路径 */
 const FONT_JSON_CANDIDATES = ['/fonts/poem.typeface.json']
 
-/** 本地 WOFF 回退（需先运行 npm run generate:poem-font 生成 JSON，或自行放置字体） */
-const WOFF_CANDIDATES = [
-  '/fonts/noto-sans-sc-chinese-simplified-400-normal.woff',
-]
+/** 本地 WOFF 回退（generate:poem-font 会复制到 public/fonts） */
+const WOFF_CANDIDATES = ['/fonts/noto-sans-sc-chinese-simplified-400-normal.woff']
 
 /** 缓存的已加载字体实例 */
 let cachedFont: Font | null = null

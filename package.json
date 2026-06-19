@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "npm run generate:poem-font && vue-tsc -b && vite build",
     "preview": "vite preview",
     "generate:poem-font": "node scripts/generate-poem-glyphs.mjs"
   },

@@ -1,6 +1,7 @@
 /**
  * 从 @fontsource/noto-sans-sc 提取解锁页所需汉字，合并进 public/fonts/poem.typeface.json
- * 运行: node scripts/generate-poem-glyphs.mjs
+ * 字符集自动同步 src/utils/poemLayout.ts 中的 DISTRACTOR_EXTRAS
+ * 运行: npm run generate:poem-font
  */
 import fs from 'fs'
 import path from 'path'
@@ -10,12 +11,26 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.join(__dirname, '..')
 
-const REQUIRED =
-  '半手抚柔面，青丝渡香腮□风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露' +
-  '回退本地静夜色落在窗棂上像一段未完成的代码等待被编译成梦蒲公英解体的那一秒整片草原都在悄悄重写自己的坐标系'
+/** 从 poemLayout.ts 提取 DISTRACTOR_EXTRAS 与解锁诗文用字 */
+function collectRequiredChars() {
+  const poemLayoutPath = path.join(root, 'src/utils/poemLayout.ts')
+  const source = fs.readFileSync(poemLayoutPath, 'utf8')
 
+  const extrasStart = source.indexOf('const DISTRACTOR_EXTRAS')
+  const extrasEnd = source.indexOf('/** 获取本篇诗文', extrasStart)
+  const extrasBlock = source.slice(extrasStart, extrasEnd)
+  const extras = [...extrasBlock.matchAll(/'([^']*)'/g)].map((m) => m[1]).join('')
+
+  const poemMatch = source.match(/content:\s*'([^']+)'/)
+  const poem = (poemMatch?.[1] ?? '青丝渡香腮\n半手抚柔面').replace(/\\n/g, '')
+
+  return [...new Set((poem + extras + '□').split(''))].filter(Boolean).join('')
+}
+
+const REQUIRED = collectRequiredChars()
 const filesDir = path.join(root, 'node_modules/@fontsource/noto-sans-sc/files')
 const outPath = path.join(root, 'public/fonts/poem.typeface.json')
+const publicWoffDir = path.join(root, 'public/fonts')
 
 function flipY(y, ascender) {
   return ascender - y
@@ -70,26 +85,43 @@ const woffFiles = fs
   .readdirSync(filesDir)
   .filter((f) => f.includes('chinese-simplified-400-normal.woff') && !f.endsWith('woff2'))
 
+if (woffFiles.length === 0) {
+  console.error('No Noto Sans SC woff files found. Run npm install first.')
+  process.exit(1)
+}
+
+/** 复制 WOFF 到 public/fonts，供运行时子集补全回退 */
+const primaryWoff = woffFiles[0]
+const publicWoffPath = path.join(publicWoffDir, primaryWoff)
+fs.mkdirSync(publicWoffDir, { recursive: true })
+fs.copyFileSync(path.join(filesDir, primaryWoff), publicWoffPath)
+console.log('copied woff fallback:', primaryWoff)
+
 const otFonts = woffFiles.map((f) => opentype.parse(fs.readFileSync(path.join(filesDir, f))))
 
 const base = JSON.parse(fs.readFileSync(outPath, 'utf8'))
 const unique = [...new Set(REQUIRED.split(''))].filter(Boolean)
 let added = 0
+const stillMissing = []
 
 for (const char of unique) {
   if (base.glyphs[char]) continue
+  let found = false
   for (const otFont of otFonts) {
     const g = glyphFromOt(otFont, char)
     if (g) {
       base.glyphs[char] = g
       added++
+      found = true
       break
     }
   }
-  if (!base.glyphs[char]) {
-    console.warn('missing glyph:', char)
-  }
+  if (!found) stillMissing.push(char)
 }
 
 fs.writeFileSync(outPath, JSON.stringify(base))
-console.log(`merged ${added} glyphs, total ${Object.keys(base.glyphs).length}`)
+console.log(`required ${unique.length} unique chars, merged ${added} glyphs, total ${Object.keys(base.glyphs).length}`)
+if (stillMissing.length) {
+  console.warn('still missing:', stillMissing.join(''))
+  process.exit(1)
+}
