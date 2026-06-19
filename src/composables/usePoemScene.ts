@@ -49,6 +49,10 @@ interface GroundTile {
   picked: boolean
   /** 相对标准字号的缩放比 */
   sizeRatio: number
+  /** 干扰字流光相位（仅干扰字） */
+  phase?: number
+  /** 干扰字流光速度（仅干扰字） */
+  speed?: number
 }
 
 /** 已放置干扰字的空间占位（防重叠） */
@@ -95,6 +99,8 @@ const POEM_EXCLUDE_X = 3.6
 const POEM_EXCLUDE_Y = 4.0
 /** 中心诗区 Y 锚点 */
 const POEM_CENTER_Y = 0.85
+/** 竖排各列垂直错位幅度 — 多列时高低参差 */
+const COL_Y_STAGGER_AMP = 1.75
 /** 地面字最小尺寸 */
 const GROUND_CHAR_MIN = 0.32
 /** 地面字最大尺寸 */
@@ -258,15 +264,17 @@ export function usePoemScene(
 
   // ── 布局坐标 ──
 
-  /** 计算槽位世界坐标（竖排布局） */
+  /** 计算槽位世界坐标（竖排布局，各列垂直错开） */
   function slotWorldPosition(col: number, row: number, maxRows: number): THREE.Vector3 {
     const lineCount = layoutRef.value?.lines.length ?? 1
     const maxCol = lineCount - 1
     const cx = maxCol * COL_SP * 0.5
     const cy = (maxRows - 1) * ROW_SP * 0.5
+    const colStagger =
+      lineCount > 1 ? ((col / (lineCount - 1)) - 0.5) * COL_Y_STAGGER_AMP : 0
     return new THREE.Vector3(
       cx - col * COL_SP,
-      cy - row * ROW_SP + 0.5,
+      cy - row * ROW_SP + 0.5 + colStagger,
       0,
     )
   }
@@ -357,6 +365,24 @@ export function usePoemScene(
     }
   }
 
+  /** 单字材质流光闪烁（背景字 / 干扰字共用） */
+  function applyCharSparkle(
+    mat: THREE.MeshStandardMaterial,
+    time: number,
+    phase: number,
+    speed: number,
+  ): void {
+    const t = time * speed + phase
+    const flicker =
+      Math.sin(t * 1.65) * Math.sin(t * 2.35 + 0.9) * Math.sin(t * 0.58 + 1.4)
+    const sparkle = flicker > 0.72 ? (flicker - 0.72) / 0.28 : 0
+    const eased = sparkle * sparkle * (3 - 2 * sparkle)
+
+    mat.emissiveIntensity = 0.1 + eased * 0.82
+    mat.emissive.setRGB(0.22 + eased * 0.55, 0.17 + eased * 0.42, 0.04 + eased * 0.06)
+    mat.color.setRGB(0.58 + eased * 0.18, 0.52 + eased * 0.22, 0.42 + eased * 0.12)
+  }
+
   /** 更新中心诗文字呼吸辉光 */
   function updatePoemGlow(time: number): void {
     const pulse = 0.9 + Math.sin(time * 1.35) * 0.1
@@ -370,16 +396,16 @@ export function usePoemScene(
   /** 更新背景字闪烁发光 */
   function updateBackgroundSparkle(time: number): void {
     for (const bg of backgroundChars) {
-      const mat = bg.mesh.material as THREE.MeshStandardMaterial
-      const t = time * bg.speed + bg.phase
-      const flicker =
-        Math.sin(t * 1.65) * Math.sin(t * 2.35 + 0.9) * Math.sin(t * 0.58 + 1.4)
-      const sparkle = flicker > 0.72 ? (flicker - 0.72) / 0.28 : 0
-      const eased = sparkle * sparkle * (3 - 2 * sparkle)
+      applyCharSparkle(bg.mesh.material as THREE.MeshStandardMaterial, time, bg.phase, bg.speed)
+    }
+  }
 
-      mat.emissiveIntensity = 0.1 + eased * 0.82
-      mat.emissive.setRGB(0.22 + eased * 0.55, 0.17 + eased * 0.42, 0.04 + eased * 0.06)
-      mat.color.setRGB(0.58 + eased * 0.18, 0.52 + eased * 0.22, 0.42 + eased * 0.12)
+  /** 更新地面干扰字闪烁发光 */
+  function updateGroundDistractorSparkle(time: number): void {
+    for (const tile of groundTiles) {
+      if (tile.isCorrect || tile.picked || !tile.mesh.visible) continue
+      if (tile.phase === undefined || tile.speed === undefined) continue
+      applyCharSparkle(tile.mesh.material as THREE.MeshStandardMaterial, time, tile.phase, tile.speed)
     }
   }
 
@@ -459,7 +485,8 @@ export function usePoemScene(
       placed.push({ x: pos.x, y: pos.y, z: pos.z, radius: charRadius })
       const sizeRatio = charSize / CHAR_SIZE
 
-      const mesh = makeTextMesh(font, item.char, createGroundMaterial(), charSize)
+      const material = item.isCorrect ? createGroundMaterial() : createBackgroundMaterial()
+      const mesh = makeTextMesh(font, item.char, material, charSize)
       mesh.position.copy(pos)
       mesh.rotation.set(
         (Math.random() - 0.5) * 0.12,
@@ -467,6 +494,7 @@ export function usePoemScene(
         (Math.random() - 0.5) * 0.05,
       )
       mesh.userData.groundChar = true
+      mesh.userData.isDistractor = !item.isCorrect
       mesh.userData.baseY = pos.y
       groundGroup.add(mesh)
 
@@ -477,6 +505,8 @@ export function usePoemScene(
         blankGlobalIndex: item.blankIdx,
         picked: false,
         sizeRatio,
+        phase: item.isCorrect ? undefined : Math.random() * Math.PI * 2,
+        speed: item.isCorrect ? undefined : 0.35 + Math.random() * 0.85,
       })
     }
   }
@@ -777,8 +807,6 @@ export function usePoemScene(
       obj.visible = false
     })
 
-    groundGroup.visible = false
-
     const buf = new THREE.BufferGeometry()
     buf.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
 
@@ -857,8 +885,13 @@ export function usePoemScene(
 
     if (phase.value === 'playing') {
       updatePoemGlow(clock.elapsedTime)
+    }
+
+    if (phase.value === 'playing' || phase.value === 'dissolving') {
       updateBackgroundSparkle(clock.elapsedTime)
+      updateGroundDistractorSparkle(clock.elapsedTime)
       groundGroup.children.forEach((c, i) => {
+        if (!c.visible) return
         const baseY = (c.userData.baseY as number | undefined) ?? c.position.y
         c.position.y = baseY + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
       })
