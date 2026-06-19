@@ -69,7 +69,9 @@ export function buildPoemLayout(
 
 /** 干扰字扩展意象字符集（不含本篇诗文用字） */
 const DISTRACTOR_EXTRAS =
-  '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露'
+  '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露' +
+  '春夏秋冬晨昏鸟虫鱼林木石泉溪云霞烟雨雪霜肝胆心意情思乡愁归雁孤舟' +
+  '渔火灯烛笔墨纸砚帘幕庭院楼阁亭台碑帖古卷松柏杨柳桃李杏李'
 
 /** 获取本篇诗文所有保留字（解锁字，不可在干扰/背景中重复出现） */
 export function getPoemReservedChars(layout: PoemLayout): Set<string> {
@@ -90,10 +92,32 @@ export function collectDistractorChars(layout: PoemLayout): string[] {
   return [...set]
 }
 
+/** 获取可用于干扰/背景的字形集合（去重，排除本篇诗文用字） */
+export function getDistractorCharSet(layout: PoemLayout): string[] {
+  const reserved = getPoemReservedChars(layout)
+  return [...DISTRACTOR_EXTRAS].filter((c) => !reserved.has(c))
+}
+
 /** 构建全屏干扰字池 — 排除本篇诗文用字，每字唯一 */
 export function buildUniqueGroundDistractors(layout: PoemLayout): string[] {
-  const reserved = getPoemReservedChars(layout)
-  const pool = [...DISTRACTOR_EXTRAS].filter((c) => !reserved.has(c))
+  const pool = getDistractorCharSet(layout)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool
+}
+
+/** 构建可点击干扰字池 — 允许意象字重复出现以增加数量 */
+export function buildGroundDistractorPool(
+  layout: PoemLayout,
+  copiesPerChar = 2,
+): string[] {
+  const base = buildUniqueGroundDistractors(layout)
+  const pool: string[] = []
+  for (const c of base) {
+    for (let i = 0; i < copiesPerChar; i++) pool.push(c)
+  }
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[pool[i], pool[j]] = [pool[j], pool[i]]

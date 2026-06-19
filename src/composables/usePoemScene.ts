@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import type { PoemLayout } from '@/types/poem'
-import { buildBackgroundCharPool, buildUniqueGroundDistractors } from '@/utils/poemLayout'
+import { buildBackgroundCharPool, buildGroundDistractorPool } from '@/utils/poemLayout'
 import { fontHasChar } from '@/utils/chineseFontLoader'
 
 /** 诗词场景阶段 */
@@ -51,6 +51,14 @@ interface GroundTile {
   sizeRatio: number
 }
 
+/** 已放置干扰字的空间占位（防重叠） */
+interface PlacedGroundSlot {
+  x: number
+  y: number
+  z: number
+  radius: number
+}
+
 /** 解体流光粒子 */
 interface Particle {
   /** 当前 X */
@@ -91,8 +99,12 @@ const POEM_CENTER_Y = 0.85
 const GROUND_CHAR_MIN = 0.32
 /** 地面字最大尺寸 */
 const GROUND_CHAR_MAX = 0.84
+/** 干扰字最小间距（世界坐标） */
+const GROUND_CHAR_MIN_GAP = 0.72
+/** 解体粒子每个顶点额外子粒子数 */
+const DISSOLVE_SUB_PARTICLES = 2
 /** 默认流光解体时长 (ms) */
-const DEFAULT_DISSOLVE_MS = 2000
+const DEFAULT_DISSOLVE_MS = 4800
 
 /** 背景闪烁字数据 */
 interface BackgroundChar {
@@ -381,32 +393,41 @@ export function usePoemScene(
     return GROUND_CHAR_MIN + skew * (GROUND_CHAR_MAX - GROUND_CHAR_MIN)
   }
 
-  /** 全屏范围内随机 scatter，避开中心诗区 */
-  function pickFullScreenScatterPosition(): THREE.Vector3 {
-    const z = (Math.random() - 0.5) * 12
-    const dist = Math.abs(camera!.position.z - z)
-    const vFov = (camera!.fov * Math.PI) / 180
-    const visibleH = 2 * Math.tan(vFov / 2) * dist
-    const visibleW = visibleH * camera!.aspect
-    const halfW = visibleW * 0.48
-    const halfH = visibleH * 0.48
+  /** 全屏范围内随机 scatter，避开中心诗区与已有字块 */
+  function pickNonOverlappingPosition(
+    charRadius: number,
+    placed: PlacedGroundSlot[],
+  ): THREE.Vector3 | null {
+    for (let attempt = 0; attempt < 64; attempt++) {
+      const z = (Math.random() - 0.5) * 10
+      const dist = Math.abs(camera!.position.z - z)
+      const vFov = (camera!.fov * Math.PI) / 180
+      const visibleH = 2 * Math.tan(vFov / 2) * dist
+      const visibleW = visibleH * camera!.aspect
+      const halfW = visibleW * 0.46
+      const halfH = visibleH * 0.46
 
-    for (let attempt = 0; attempt < 36; attempt++) {
       const x = (Math.random() * 2 - 1) * halfW
       const y = (Math.random() * 2 - 1) * halfH + POEM_CENTER_Y
       if (Math.abs(x) < POEM_EXCLUDE_X && Math.abs(y - POEM_CENTER_Y) < POEM_EXCLUDE_Y) continue
-      return new THREE.Vector3(x, y, z)
-    }
 
-    const side = Math.random() > 0.5 ? 1 : -1
-    return new THREE.Vector3(
-      side * halfW * (0.72 + Math.random() * 0.24),
-      (Math.random() * 2 - 1) * halfH * 0.88 + POEM_CENTER_Y,
-      z,
-    )
+      let ok = true
+      for (const p of placed) {
+        const dx = x - p.x
+        const dy = y - p.y
+        const dz = z - p.z
+        const minDist = charRadius + p.radius + GROUND_CHAR_MIN_GAP
+        if (dx * dx + dy * dy + dz * dz < minDist * minDist) {
+          ok = false
+          break
+        }
+      }
+      if (ok) return new THREE.Vector3(x, y, z)
+    }
+    return null
   }
 
-  /** 构建全屏散落字块 — 每字唯一，不含中心诗文字重复 */
+  /** 构建全屏散落字块 — 干扰字更多、互不重叠 */
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
@@ -415,7 +436,7 @@ export function usePoemScene(
       .filter((s) => s.isBlank)
       .map((s) => ({ char: s.char, idx: s.globalIndex }))
 
-    const distractors = buildUniqueGroundDistractors(layout)
+    const distractors = buildGroundDistractorPool(layout, 3)
     const pool: Array<{ char: string; isCorrect: boolean; blankIdx: number | null }> = []
 
     for (const c of correctChars) {
@@ -427,9 +448,15 @@ export function usePoemScene(
 
     pool.sort(() => Math.random() - 0.5)
 
+    const placed: PlacedGroundSlot[] = []
+
     for (const item of pool) {
-      const pos = pickFullScreenScatterPosition()
       const charSize = randomGroundCharSize(item.isCorrect)
+      const charRadius = charSize * 0.55
+      const pos = pickNonOverlappingPosition(charRadius, placed)
+      if (!pos) continue
+
+      placed.push({ x: pos.x, y: pos.y, z: pos.z, radius: charRadius })
       const sizeRatio = charSize / CHAR_SIZE
 
       const mesh = makeTextMesh(font, item.char, createGroundMaterial(), charSize)
@@ -705,6 +732,28 @@ export function usePoemScene(
     const positions: number[] = []
     const velocities: Particle[] = []
 
+    const emitParticle = (wx: number, wy: number, wz: number): void => {
+      positions.push(wx, wy, wz)
+
+      const dir = new THREE.Vector3(
+        wx - poemGroup.position.x,
+        wy - poemGroup.position.y,
+        wz - poemGroup.position.z,
+      )
+      if (dir.lengthSq() < 0.01) dir.set(Math.random() - 0.5, 0.6 + Math.random() * 0.4, Math.random() - 0.5)
+      dir.normalize()
+
+      const burst = 0.028 + Math.random() * 0.045
+      velocities.push({
+        x: wx,
+        y: wy,
+        z: wz,
+        vx: dir.x * burst * 0.55 + (Math.random() - 0.5) * 0.055,
+        vy: Math.abs(dir.y) * burst * 0.35 + 0.028 + Math.random() * 0.038,
+        vz: dir.z * burst * 0.55 + (Math.random() - 0.5) * 0.055,
+      })
+    }
+
     poemGroup.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return
       const geo = obj.geometry as THREE.BufferGeometry
@@ -714,32 +763,16 @@ export function usePoemScene(
       const worldMatrix = obj.matrixWorld
       const v = new THREE.Vector3()
 
-      for (let i = 0; i < posAttr.count; i += 3) {
+      for (let i = 0; i < posAttr.count; i++) {
         v.fromBufferAttribute(posAttr, i)
         v.applyMatrix4(worldMatrix)
 
-        const dx = v.x + (Math.random() - 0.5) * 0.2
-        const dy = v.y + (Math.random() - 0.5) * 0.2
-        const dz = v.z + (Math.random() - 0.5) * 0.2
-        positions.push(dx, dy, dz)
-
-        const dir = new THREE.Vector3(
-          dx - poemGroup.position.x,
-          dy - poemGroup.position.y,
-          dz - poemGroup.position.z,
-        )
-        if (dir.lengthSq() < 0.01) dir.set(Math.random() - 0.5, Math.random(), Math.random() - 0.5)
-        dir.normalize()
-
-        const burst = 0.06 + Math.random() * 0.12
-        velocities.push({
-          x: dx,
-          y: dy,
-          z: dz,
-          vx: dir.x * burst + (Math.random() - 0.5) * 0.04,
-          vy: dir.y * burst + 0.02 + Math.random() * 0.04,
-          vz: dir.z * burst + (Math.random() - 0.5) * 0.04,
-        })
+        for (let sub = 0; sub < DISSOLVE_SUB_PARTICLES; sub++) {
+          const jx = (Math.random() - 0.5) * 0.14
+          const jy = (Math.random() - 0.5) * 0.14
+          const jz = (Math.random() - 0.5) * 0.14
+          emitParticle(v.x + jx, v.y + jy, v.z + jz)
+        }
       }
       obj.visible = false
     })
@@ -750,8 +783,8 @@ export function usePoemScene(
     buf.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
 
     const mat = new THREE.PointsMaterial({
-      color: 0xffd040,
-      size: 0.06,
+      color: 0xffe890,
+      size: 0.042,
       transparent: true,
       opacity: 1,
       blending: THREE.AdditiveBlending,
@@ -772,13 +805,14 @@ export function usePoemScene(
     const fade = Math.max(0, 1 - elapsed / dissolveDuration)
 
     for (const p of particles) {
-      p.vx *= 0.985
-      p.vy *= 0.985
-      p.vz *= 0.985
-      p.vy += 0.0008
-      p.x += p.vx * dt * 60
-      p.y += p.vy * dt * 60
-      p.z += p.vz * dt * 60
+      p.vx *= 0.994
+      p.vy *= 0.994
+      p.vz *= 0.994
+      p.vy += 0.00028
+      p.vx += (Math.random() - 0.5) * 0.0006
+      p.x += p.vx * dt * 42
+      p.y += p.vy * dt * 42
+      p.z += p.vz * dt * 42
     }
 
     const arr = pointsMesh.geometry.getAttribute('position') as THREE.BufferAttribute

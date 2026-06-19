@@ -28,7 +28,7 @@ const loadError = ref(false)
 /** 诗文交互场景的阶段、填空进度及生命周期方法 */
 const { phase, filledCount, totalBlanks, init, dispose, rebuildScene } =
   usePoemScene(canvasRef, layoutRef, fontRef, {
-    dissolveDuration: 2000,
+    dissolveDuration: 4800,
     /** 全部空缺填完后通知父组件 */
     onComplete: () => emit('complete'),
   })
