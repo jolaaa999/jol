@@ -90,7 +90,7 @@ function enterBlog(): void {
           :key="`${char}-${i}`"
           class="entry__char-wrap"
         >
-          <span class="entry__char" data-hero-char>{{ char === ' ' ? '\u00A0' : char }}</span>
+          <span class="entry__char entry__iridescent entry__iridescent--hero" data-hero-char>{{ char === ' ' ? '\u00A0' : char }}</span>
         </span>
       </h1>
 
@@ -151,8 +151,8 @@ function enterBlog(): void {
           <button type="button" class="entry__menu-close" @click="closeMenu">
             <span class="entry__menu-close-mask">
               <span class="entry__menu-close-inner" data-menu-reveal>
-                <span>Close</span>
-                <span aria-hidden="true">×</span>
+                <span class="entry__iridescent entry__iridescent--menu">Close</span>
+                <span class="entry__iridescent entry__iridescent--menu" aria-hidden="true">×</span>
               </span>
             </span>
           </button>
@@ -166,7 +166,7 @@ function enterBlog(): void {
               @click.prevent="navigateTo(item.href)"
             >
               <span class="entry__menu-link-mask">
-                <span class="entry__menu-link-inner" data-menu-reveal>{{ item.label }}</span>
+                <span class="entry__menu-link-inner entry__iridescent entry__iridescent--menu" data-menu-reveal>{{ item.label }}</span>
               </span>
             </a>
           </nav>
@@ -179,15 +179,15 @@ function enterBlog(): void {
           >
             <span class="entry__menu-credits-mask">
               <span class="entry__menu-credits-inner" data-menu-reveal>
-                Credits
-                <span class="entry__menu-arrow" aria-hidden="true">↗</span>
+                <span class="entry__iridescent entry__iridescent--menu">Credits</span>
+                <span class="entry__menu-arrow entry__iridescent entry__iridescent--menu" aria-hidden="true">↗</span>
               </span>
             </span>
           </a>
 
           <footer class="entry__menu-footer">
             <span class="entry__menu-footer-label-mask">
-              <span class="entry__menu-footer-label" data-menu-reveal>Socials</span>
+              <span class="entry__menu-footer-label entry__iridescent entry__iridescent--menu" data-menu-reveal>Socials</span>
             </span>
             <div class="entry__menu-footer-links">
               <button
@@ -196,7 +196,7 @@ function enterBlog(): void {
                 @click="cyclePalette"
               >
                 <span class="entry__menu-footer-link-mask">
-                  <span data-menu-reveal>切换背景</span>
+                  <span class="entry__iridescent entry__iridescent--menu" data-menu-reveal>切换背景</span>
                 </span>
               </button>
               <a
@@ -206,7 +206,7 @@ function enterBlog(): void {
                 rel="noopener noreferrer"
               >
                 <span class="entry__menu-footer-link-mask">
-                  <span data-menu-reveal>GitHub</span>
+                  <span class="entry__iridescent entry__iridescent--menu" data-menu-reveal>GitHub</span>
                 </span>
               </a>
             </div>
@@ -333,7 +333,6 @@ function enterBlog(): void {
   font-weight: 700;
   line-height: 1.02;
   letter-spacing: -0.03em;
-  color: rgba(255, 255, 255, 0.94);
 }
 
 .entry__char-wrap {
@@ -346,6 +345,69 @@ function enterBlog(): void {
 .entry__char {
   display: inline-block;
   will-change: transform;
+}
+
+/* ── 炫彩渐变文字：与流体背景色板呼应 ── */
+.entry__iridescent {
+  display: inline-block;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* 深色 Hero 背景：高亮流光，偏冷青 / 紫 / 品红 */
+.entry__iridescent--hero {
+  background-image: linear-gradient(
+    115deg,
+    #ffffff 0%,
+    #9ed8ff 10%,
+    #7c8cff 24%,
+    #c084fc 38%,
+    #f0abfc 50%,
+    #22d3ee 64%,
+    #60a5fa 78%,
+    #ffffff 100%
+  );
+  background-size: 280% 100%;
+  animation: entry-iridescent-flow 8s linear infinite;
+}
+
+/* 浅色菜单面板：饱和深色系，保证白底可读 */
+.entry__iridescent--menu {
+  background-image: linear-gradient(
+    115deg,
+    #1a0a6e 0%,
+    #3218c8 12%,
+    #1a52e8 26%,
+    #7c3aed 40%,
+    #c026d3 54%,
+    #0891b2 68%,
+    #4338ca 82%,
+    #1a0a6e 100%
+  );
+  background-size: 280% 100%;
+  animation: entry-iridescent-flow 6.5s linear infinite;
+}
+
+@keyframes entry-iridescent-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 280% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry__iridescent--hero,
+  .entry__iridescent--menu {
+    animation: none;
+    background-size: 100% 100%;
+    background-position: 0% 50%;
+  }
 }
 
 .entry__bio {
@@ -530,8 +592,11 @@ function enterBlog(): void {
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.09);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
-  color: #8a8a8a;
   will-change: transform;
+}
+
+.entry__menu-close-inner .entry__iridescent--menu {
+  display: inline-block;
 }
 
 .entry__menu-nav {
@@ -560,18 +625,21 @@ function enterBlog(): void {
 .entry__menu-link-inner {
   display: block;
   will-change: transform;
-  transition: opacity 0.28s var(--ease-mechanical);
+  transition: filter 0.28s var(--ease-mechanical);
+}
+
+.entry__menu-link-inner.entry__iridescent--menu {
+  display: block;
 }
 
 .entry__menu-link:hover .entry__menu-link-inner {
-  opacity: 0.48;
+  filter: brightness(1.12) saturate(1.15);
 }
 
 .entry__menu-credits {
   display: inline-block;
   margin-bottom: clamp(1.5rem, 4vh, 2.5rem);
   text-decoration: none;
-  color: #6b28d9;
   font-family: var(--font-mono);
   font-size: 0.875rem;
 }
@@ -588,6 +656,10 @@ function enterBlog(): void {
   align-items: center;
   gap: 0.35rem;
   will-change: transform;
+}
+
+.entry__menu-credits-inner .entry__iridescent--menu {
+  display: inline-block;
 }
 
 .entry__menu-arrow {
@@ -612,7 +684,6 @@ function enterBlog(): void {
   font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #6b28d9;
   will-change: transform;
 }
 
@@ -628,7 +699,6 @@ function enterBlog(): void {
   background: none;
   font-family: var(--font-sans);
   font-size: 0.875rem;
-  color: #2a2a2a;
   text-decoration: none;
   cursor: pointer;
 }
@@ -643,11 +713,11 @@ function enterBlog(): void {
 .entry__menu-footer-link-mask span {
   display: block;
   will-change: transform;
-  transition: opacity 0.25s var(--ease-mechanical);
+  transition: filter 0.25s var(--ease-mechanical);
 }
 
 .entry__menu-footer-link:hover span {
-  opacity: 0.5;
+  filter: brightness(1.1) saturate(1.12);
 }
 
 @media (max-width: 640px) {
