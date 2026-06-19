@@ -67,18 +67,21 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     }
   }
 
-  /** 菜单层初始：全部收在抽屉左缘外侧（不在浏览器右缘） */
+  /** 菜单层初始：以右缘为轴，全部收在各自右侧（待向左滑入） */
   function initMenuClosed(): void {
     if (!rootRef.value) return
 
     const { layer1, layer2, panel, backdrop, revealEls } = getMenuLayers(rootRef.value)
 
-    gsap.set([layer1, layer2, panel], { xPercent: -100 })
+    gsap.set([layer1, layer2, panel], {
+      xPercent: 100,
+      transformOrigin: 'right center',
+    })
     gsap.set(backdrop, { opacity: 0 })
     gsap.set(revealEls, { yPercent: 110, opacity: 0 })
   }
 
-  /** 菜单打开：两层色带先从左缘递进展开，白面板最后覆盖其上 */
+  /** 菜单打开：黑 → 紫 → 白，三层依次从右缘向左滑入 */
   function openMenu(): void {
     if (!rootRef.value || menuOpen.value || isAnimating.value) return
 
@@ -97,25 +100,31 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     })
 
     if (reduced) {
-      gsap.set([layer1, layer2, panel], { xPercent: 0 })
+      gsap.set([layer1, layer2, panel], {
+        xPercent: 0,
+        transformOrigin: 'right center',
+      })
       gsap.set(backdrop, { opacity: 1 })
       gsap.set(revealEls, { yPercent: 0, opacity: 1 })
       isAnimating.value = false
       return
     }
 
-    gsap.set([layer1, layer2, panel], { xPercent: -100 })
+    gsap.set([layer1, layer2, panel], {
+      xPercent: 100,
+      transformOrigin: 'right center',
+    })
     gsap.set(backdrop, { opacity: 0 })
     gsap.set(revealEls, { yPercent: 110, opacity: 0 })
 
     menuTimeline
       .to(backdrop, { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
-      /* 深色内层最先从左缘露出 */
+      /* 黑色层最先从右缘向左滑入 */
       .to(layer1, { xPercent: 0, duration: 0.52, ease: 'power3.inOut' }, 0.05)
-      /* 紫色中层覆盖深色带右侧 */
-      .to(layer2, { xPercent: 0, duration: 0.54, ease: 'power3.inOut' }, '+=0.12')
-      /* 白面板最后从左缘滑入，覆盖紫色带 */
-      .to(panel, { xPercent: 0, duration: 0.6, ease: 'power3.inOut' }, '+=0.12')
+      /* 紫色层紧随其后 */
+      .to(layer2, { xPercent: 0, duration: 0.54, ease: 'power3.inOut' }, 0.13)
+      /* 白色面板最后向左滑入 */
+      .to(panel, { xPercent: 0, duration: 0.6, ease: 'power3.inOut' }, 0.21)
       .to(
         revealEls,
         {
@@ -129,7 +138,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       )
   }
 
-  /** 菜单关闭：文字收回 → 白面板 → 紫带 → 深带，逆序收回左缘 */
+  /** 菜单关闭：文字收回 → 白 → 紫 → 黑，逆序向右收回 */
   function closeMenu(): void {
     if (!rootRef.value || !menuOpen.value || isAnimating.value) return
 
@@ -165,9 +174,21 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
         stagger: 0.025,
         ease: 'power2.in',
       })
-      .to(panel, { xPercent: -100, duration: 0.52, ease: 'power3.inOut' }, '-=0.06')
-      .to(layer2, { xPercent: -100, duration: 0.5, ease: 'power3.inOut' }, '+=0.08')
-      .to(layer1, { xPercent: -100, duration: 0.48, ease: 'power3.inOut' }, '+=0.08')
+      .to(
+        panel,
+        { xPercent: 100, duration: 0.52, ease: 'power3.inOut', transformOrigin: 'right center' },
+        '-=0.06',
+      )
+      .to(
+        layer2,
+        { xPercent: 100, duration: 0.5, ease: 'power3.inOut', transformOrigin: 'right center' },
+        0.28,
+      )
+      .to(
+        layer1,
+        { xPercent: 100, duration: 0.48, ease: 'power3.inOut', transformOrigin: 'right center' },
+        0.36,
+      )
       .to(backdrop, { opacity: 0, duration: 0.38, ease: 'power2.in' }, '-=0.32')
   }
 

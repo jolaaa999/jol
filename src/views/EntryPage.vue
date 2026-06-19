@@ -463,8 +463,8 @@ function enterBlog(): void {
   position: absolute;
   top: 0;
   height: 100%;
-  /* 从抽屉左缘向外展开，而非从浏览器右缘滑入 */
-  transform-origin: left center;
+  /* 以右缘（屏幕侧）为轴，三层依次向左滑入 */
+  transform-origin: right center;
   will-change: transform;
 }
 
