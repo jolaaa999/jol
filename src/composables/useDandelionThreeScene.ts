@@ -40,6 +40,8 @@ interface FluffParticle {
   warmup: number
   /** 金色调混合比 */
   goldMix: number
+  /** 白金光晕相位（idle 呼吸用） */
+  haloPhase: number
   /** 深度 Z 偏移 */
   z: number
 }
@@ -47,9 +49,9 @@ interface FluffParticle {
 /** 茎秆节点数量 */
 const STEM_NODES = 8
 /** 绒球粒子总数 */
-const PARTICLE_COUNT = 1280
-/** 粒子点精灵尺寸 */
-const PARTICLE_SIZE = 4.3
+const PARTICLE_COUNT = 2800
+/** 粒子点精灵尺寸（叠加后形成致密绒球） */
+const PARTICLE_SIZE = 5.6
 /** 最大设备像素比 */
 const MAX_DPR = 2
 /** 黄金角 — 向日葵/蒲公英分布 */
@@ -64,12 +66,12 @@ const MOUSE_WIND_FLUFF = 0.18
 const AMBIENT_WIND_IDLE = 0.018
 /** 有鼠标时环境风强度倍率 */
 const AMBIENT_WIND_HOVER = 0.03
-/** Bloom 强度（仅高光粒子，背景不参与） */
-const BLOOM_STRENGTH = 0.22
+/** Bloom 强度（idle 下粒子白金光晕） */
+const BLOOM_STRENGTH = 0.44
 /** Bloom 扩散半径 */
-const BLOOM_RADIUS = 0.28
-/** Bloom 亮度阈值（高于此值才发光，避免麦黄背景过曝） */
-const BLOOM_THRESHOLD = 0.9
+const BLOOM_RADIUS = 0.38
+/** Bloom 亮度阈值（背景麦黄不参与，粒子高亮触发光晕） */
+const BLOOM_THRESHOLD = 0.82
 
 /** 与 Landing.vue CSS 一致的麦黄田园渐变，供 WebGL 不透明渲染（Bloom 会盖住下层 CSS） */
 function createPastoralGradientTexture(width: number, height: number): THREE.CanvasTexture {
@@ -117,19 +119,21 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
   return tex
 }
 
-/** 创建粒子发光贴图 */
+/** 创建粒子白金光晕贴图 */
 function createGlowTexture(): THREE.CanvasTexture {
-  /** 发光贴图分辨率（像素） */
-  const size = 64
+  /** 发光贴图分辨率（像素）— 更高分辨率使光晕更柔 */
+  const size = 96
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  g.addColorStop(0, 'rgba(255, 235, 200, 0.9)')
-  g.addColorStop(0.25, 'rgba(255, 220, 170, 0.55)')
-  g.addColorStop(0.55, 'rgba(240, 190, 120, 0.2)')
-  g.addColorStop(1, 'rgba(220, 160, 80, 0)')
+  g.addColorStop(0, 'rgba(255, 253, 250, 1)')
+  g.addColorStop(0.1, 'rgba(255, 248, 238, 0.92)')
+  g.addColorStop(0.28, 'rgba(255, 240, 220, 0.68)')
+  g.addColorStop(0.5, 'rgba(255, 228, 195, 0.32)')
+  g.addColorStop(0.72, 'rgba(255, 215, 175, 0.12)')
+  g.addColorStop(1, 'rgba(255, 200, 155, 0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
   const tex = new THREE.CanvasTexture(canvas)
@@ -273,11 +277,14 @@ export function useDandelionThreeScene(
     const seedAnchorY = headPx.y
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const t = (i + Math.random() * 0.35) / PARTICLE_COUNT
-      const dist = headSpread * Math.sqrt(t)
-      const angle = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.14
-      const ox = Math.cos(angle) * dist
-      const oy = Math.sin(angle) * dist * 0.92
+      /** 幂次 < 0.5 使盘面填充更均匀，绒球更致密 */
+      const t = (i + Math.random() * 0.22) / PARTICLE_COUNT
+      const dist =
+        headSpread * Math.pow(t, 0.56) + (Math.random() - 0.5) * headSpread * 0.036
+      const clampedDist = Math.max(1.5, Math.min(headSpread * 1.01, dist))
+      const angle = i * GOLDEN_ANGLE + (Math.random() - 0.5) * 0.08
+      const ox = Math.cos(angle) * clampedDist
+      const oy = Math.sin(angle) * clampedDist * 0.93
       const sx = cx + ox
       const sy = seedAnchorY + oy
 
@@ -295,7 +302,7 @@ export function useDandelionThreeScene(
       engine.addSpring({
         a: headEngineId,
         b: engineId,
-        restLength: dist,
+        restLength: clampedDist,
         stiffness: 0.045 + Math.random() * 0.025,
         damping: 0.028,
       })
@@ -307,11 +314,12 @@ export function useDandelionThreeScene(
         py: sy,
         vx: 0,
         vy: 0,
-        distFromCenter: dist,
-        layer: Math.min(2, Math.floor((dist / headSpread) * 3)),
+        distFromCenter: clampedDist,
+        layer: Math.min(2, Math.floor((clampedDist / headSpread) * 3)),
         warmup: 0,
-        goldMix: 0.45 + Math.random() * 0.5,
-        z: (Math.random() - 0.5) * 12,
+        goldMix: 0.68 + Math.random() * 0.32,
+        haloPhase: Math.random() * Math.PI * 2,
+        z: (Math.random() - 0.5) * 14,
       })
     }
 
@@ -339,9 +347,10 @@ export function useDandelionThreeScene(
       positions[i * 3 + 1] = w.y
       positions[i * 3 + 2] = fp.z
       const g = fp.goldMix
-      colors[i * 3] = 0.82 + g * 0.1
-      colors[i * 3 + 1] = 0.72 + g * 0.12
-      colors[i * 3 + 2] = 0.48 + g * 0.18
+      /** 白金暖调：高亮核心 + 淡金外晕 */
+      colors[i * 3] = 0.96 + g * 0.04
+      colors[i * 3 + 1] = 0.93 + g * 0.05
+      colors[i * 3 + 2] = 0.84 + g * 0.1
     }
 
     const geo = new THREE.BufferGeometry()
@@ -355,7 +364,7 @@ export function useDandelionThreeScene(
       size: PARTICLE_SIZE,
       map: glowTexture,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.82,
       vertexColors: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -401,12 +410,12 @@ export function useDandelionThreeScene(
 
     const head = engine.particles[headEngineId]
     const hw = pxToWorld(head.x, head.y, canvasW, canvasH)
-    const glowGeo = new THREE.CircleGeometry(headSpread * 0.16, 36)
+    const glowGeo = new THREE.CircleGeometry(headSpread * 0.42, 48)
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xe8c878,
+      color: 0xfff4e6,
       transparent: true,
-      opacity: 0.07,
-      blending: THREE.NormalBlending,
+      opacity: 0.12,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
     headGlow = new THREE.Mesh(glowGeo, glowMat)
@@ -504,7 +513,35 @@ export function useDandelionThreeScene(
       const hw = pxToWorld(head.x, head.y, canvasW, canvasH)
       headGlow.position.set(hw.x, hw.y, -2)
       const mat = headGlow.material as THREE.MeshBasicMaterial
-      mat.opacity = 0.06 + Math.sin(lastTimestamp * 0.002) * 0.02
+      const pulse = 0.88 + Math.sin(lastTimestamp * 0.002) * 0.12
+      mat.opacity = 0.1 * pulse
+      headGlow.scale.set(pulse, pulse, 1)
+    }
+  }
+
+  /** idle 态白金光晕呼吸 — Bloom 与粒子微闪烁 */
+  function updateIdleVisuals(time: number): void {
+    const breathe = 0.94 + Math.sin(time * 0.0018) * 0.06
+
+    if (bloomPass) {
+      bloomPass.strength = BLOOM_STRENGTH * breathe
+      bloomPass.radius = BLOOM_RADIUS + Math.sin(time * 0.0014) * 0.035
+    }
+
+    if (points) {
+      const mat = points.material as THREE.PointsMaterial
+      mat.opacity = 0.78 + Math.sin(time * 0.0021) * 0.06
+    }
+
+    if (colorAttr) {
+      for (let i = 0; i < fluffParticles.length; i++) {
+        const fp = fluffParticles[i]
+        if (fp.detached) continue
+        const sparkle = 0.93 + Math.sin(time * 0.0024 + fp.haloPhase) * 0.07
+        const g = fp.goldMix * sparkle
+        colorAttr.setXYZ(i, 0.96 + g * 0.04, 0.93 + g * 0.05, 0.84 + g * 0.1)
+      }
+      colorAttr.needsUpdate = true
     }
   }
 
@@ -699,6 +736,7 @@ export function useDandelionThreeScene(
     if (phase.value === 'idle') {
       mouseSpeed *= 0.82
       updateIdlePhysics(timestamp, dt)
+      updateIdleVisuals(timestamp)
     } else if (phase.value === 'blowing' || phase.value === 'spreading') {
       updateDetachedPhysics(timestamp, dt)
       const elapsed = timestamp - spreadStartTime
@@ -708,7 +746,7 @@ export function useDandelionThreeScene(
       /** 粒子逐渐放大、增亮，营造「充满屏幕」感 */
       if (points) {
         const mat = points.material as THREE.PointsMaterial
-        mat.opacity = 0.58 + progress * 0.42
+        mat.opacity = 0.82 + progress * 0.18
         mat.size = PARTICLE_SIZE * (1 + progress * 2.4)
       }
 
@@ -784,7 +822,7 @@ export function useDandelionThreeScene(
     }
 
     const fastSwipe = speed > 4 && triggerAmount > 0.25
-    const enoughWarmth = warmedCount >= 18 && peakWarmup >= 0.5
+    const enoughWarmth = warmedCount >= 32 && peakWarmup >= 0.5
     const deepWarmth = peakWarmup >= 0.68 && speed > 2
 
     if (fastSwipe || enoughWarmth || deepWarmth) {

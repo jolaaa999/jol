@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import type { PoemLayout } from '@/types/poem'
-import { collectDistractorChars, buildBackgroundCharPool } from '@/utils/poemLayout'
+import { buildBackgroundCharPool, buildUniqueGroundDistractors } from '@/utils/poemLayout'
 import { fontHasChar } from '@/utils/chineseFontLoader'
 
 /** 诗词场景阶段 */
@@ -77,20 +77,20 @@ const CHAR_SIZE = 0.52
 const CHAR_DEPTH = 0.08
 /** 背景字字号 */
 const BG_CHAR_SIZE = 0.38
-/** 地面 Y 坐标 */
-const GROUND_Y = -3.2
-/** 地面字散射半径 */
-const SCATTER_R = 11
-/** 地面字最小尺寸 */
-const GROUND_CHAR_MIN = 0.32
-/** 地面字最大尺寸 */
-const GROUND_CHAR_MAX = 0.84
-/** 地面额外干扰字数量 */
-const GROUND_EXTRA_COUNT = 1056
 /** 背景字 Z 深度 */
 const BG_Z = -14
 /** 背景字网格单元尺寸 */
 const BG_CELL = 1.92
+/** 中心诗区避让半宽 */
+const POEM_EXCLUDE_X = 3.6
+/** 中心诗区避让半高 */
+const POEM_EXCLUDE_Y = 4.0
+/** 中心诗区 Y 锚点 */
+const POEM_CENTER_Y = 0.85
+/** 地面字最小尺寸 */
+const GROUND_CHAR_MIN = 0.32
+/** 地面字最大尺寸 */
+const GROUND_CHAR_MAX = 0.84
 /** 默认流光解体时长 (ms) */
 const DEFAULT_DISSOLVE_MS = 2000
 
@@ -327,7 +327,7 @@ export function usePoemScene(
         const x = startX + col * BG_CELL + (Math.random() - 0.5) * 0.22
         const y = startY + row * BG_CELL + (Math.random() - 0.5) * 0.22
 
-        if (Math.abs(x) < 3.8 && Math.abs(y - 0.8) < 4.2) continue
+        if (Math.abs(x) < POEM_EXCLUDE_X && Math.abs(y - POEM_CENTER_Y) < POEM_EXCLUDE_Y) continue
 
         const char = pool[poolIdx % pool.length]
         poolIdx++
@@ -381,45 +381,66 @@ export function usePoemScene(
     return GROUND_CHAR_MIN + skew * (GROUND_CHAR_MAX - GROUND_CHAR_MIN)
   }
 
-  /** 构建地面散落字块 */
+  /** 全屏范围内随机 scatter，避开中心诗区 */
+  function pickFullScreenScatterPosition(): THREE.Vector3 {
+    const z = (Math.random() - 0.5) * 12
+    const dist = Math.abs(camera!.position.z - z)
+    const vFov = (camera!.fov * Math.PI) / 180
+    const visibleH = 2 * Math.tan(vFov / 2) * dist
+    const visibleW = visibleH * camera!.aspect
+    const halfW = visibleW * 0.48
+    const halfH = visibleH * 0.48
+
+    for (let attempt = 0; attempt < 36; attempt++) {
+      const x = (Math.random() * 2 - 1) * halfW
+      const y = (Math.random() * 2 - 1) * halfH + POEM_CENTER_Y
+      if (Math.abs(x) < POEM_EXCLUDE_X && Math.abs(y - POEM_CENTER_Y) < POEM_EXCLUDE_Y) continue
+      return new THREE.Vector3(x, y, z)
+    }
+
+    const side = Math.random() > 0.5 ? 1 : -1
+    return new THREE.Vector3(
+      side * halfW * (0.72 + Math.random() * 0.24),
+      (Math.random() * 2 - 1) * halfH * 0.88 + POEM_CENTER_Y,
+      z,
+    )
+  }
+
+  /** 构建全屏散落字块 — 每字唯一，不含中心诗文字重复 */
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
 
-    const distractors = [
-      ...collectDistractorChars(layout),
-      ...buildBackgroundCharPool(layout),
-    ]
     const correctChars = layout.slots
       .filter((s) => s.isBlank)
       .map((s) => ({ char: s.char, idx: s.globalIndex }))
 
+    const distractors = buildUniqueGroundDistractors(layout)
     const pool: Array<{ char: string; isCorrect: boolean; blankIdx: number | null }> = []
 
     for (const c of correctChars) {
       pool.push({ char: c.char, isCorrect: true, blankIdx: c.idx })
     }
-
-    for (let i = 0; i < GROUND_EXTRA_COUNT; i++) {
-      const char = distractors[Math.floor(Math.random() * distractors.length)]
+    for (const char of distractors) {
       pool.push({ char, isCorrect: false, blankIdx: null })
     }
 
     pool.sort(() => Math.random() - 0.5)
 
     for (const item of pool) {
-      const angle = Math.random() * Math.PI * 2
-      const r = 2.5 + Math.sqrt(Math.random()) * SCATTER_R
-      const x = Math.cos(angle) * r
-      const z = Math.sin(angle) * r
-      const y = GROUND_Y + (Math.random() - 0.5) * 0.35
+      const pos = pickFullScreenScatterPosition()
       const charSize = randomGroundCharSize(item.isCorrect)
       const sizeRatio = charSize / CHAR_SIZE
 
       const mesh = makeTextMesh(font, item.char, createGroundMaterial(), charSize)
-      mesh.position.set(x, y, z)
-      mesh.rotation.set(0, 0, (Math.random() - 0.5) * 0.05)
+      mesh.position.copy(pos)
+      mesh.rotation.set(
+        (Math.random() - 0.5) * 0.12,
+        (Math.random() - 0.5) * 0.08,
+        (Math.random() - 0.5) * 0.05,
+      )
       mesh.userData.groundChar = true
+      mesh.userData.baseY = pos.y
       groundGroup.add(mesh)
 
       groundTiles.push({
@@ -804,7 +825,8 @@ export function usePoemScene(
       updatePoemGlow(clock.elapsedTime)
       updateBackgroundSparkle(clock.elapsedTime)
       groundGroup.children.forEach((c, i) => {
-        c.position.y = GROUND_Y + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
+        const baseY = (c.userData.baseY as number | undefined) ?? c.position.y
+        c.position.y = baseY + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
       })
     }
 

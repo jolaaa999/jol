@@ -67,16 +67,38 @@ export function buildPoemLayout(
   }
 }
 
+/** 干扰字扩展意象字符集（不含本篇诗文用字） */
+const DISTRACTOR_EXTRAS =
+  '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露'
+
+/** 获取本篇诗文所有保留字（解锁字，不可在干扰/背景中重复出现） */
+export function getPoemReservedChars(layout: PoemLayout): Set<string> {
+  const set = new Set<string>()
+  for (const s of layout.slots) {
+    if (!PUNCT.has(s.char) && s.char.trim()) set.add(s.char)
+  }
+  return set
+}
+
 /** 收集干扰字符池 — 诗文用字 + 常见意象字 */
 export function collectDistractorChars(layout: PoemLayout): string[] {
   const set = new Set<string>()
   for (const s of layout.slots) {
     if (!PUNCT.has(s.char)) set.add(s.char)
   }
-  /** 干扰字扩展意象字符集 */
-  const extras = '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露'
-  for (const c of extras) set.add(c)
+  for (const c of DISTRACTOR_EXTRAS) set.add(c)
   return [...set]
+}
+
+/** 构建全屏干扰字池 — 排除本篇诗文用字，每字唯一 */
+export function buildUniqueGroundDistractors(layout: PoemLayout): string[] {
+  const reserved = getPoemReservedChars(layout)
+  const pool = [...DISTRACTOR_EXTRAS].filter((c) => !reserved.has(c))
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool
 }
 
 /** 按指定字挖空（仅挖非标点且首次匹配） */
@@ -103,31 +125,16 @@ export function buildPoemLayoutWithBlanks(
   return layout
 }
 
-/** 背景字阵字符池 — 重复铺陈以铺满画面 */
+/** 背景字阵字符池 — 仅意象字，不含本篇诗文用字 */
 export function buildBackgroundCharPool(layout: PoemLayout): string[] {
-  const pool: string[] = []
-  for (const s of layout.slots) {
-    if (!PUNCT.has(s.char)) pool.push(s.char)
-  }
-  /** 背景铺陈扩展字符集（含本篇诗文意象） */
-  const extras =
-    '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露半手柔面青丝香腮'
-  for (let r = 0; r < 6; r++) {
-    for (const c of extras) pool.push(c)
-  }
-  for (let i = pool.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[pool[i], pool[j]] = [pool[j], pool[i]]
-  }
-  return pool
+  return buildUniqueGroundDistractors(layout)
 }
 
 /** 汇总所有需加载字形的字符 */
 export function collectAllFontChars(layout: PoemLayout): string {
   return (
     layout.slots.map((s) => s.char).join('') +
-    collectDistractorChars(layout).join('') +
-    buildBackgroundCharPool(layout).join('') +
+    buildUniqueGroundDistractors(layout).join('') +
     '□'
   )
 }
