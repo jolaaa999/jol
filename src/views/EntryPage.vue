@@ -142,10 +142,12 @@ function enterBlog(): void {
         @click="closeMenu"
       />
 
-      <div class="entry__menu-drawer">
-        <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
-        <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
-        <aside class="entry__menu-panel" data-menu-panel>
+      <div class="entry__menu-drawer" data-menu-drawer>
+        <!-- 三层右缘对齐、零间隙堆叠，从浏览器侧面连续推出 -->
+        <div class="entry__menu-stack">
+          <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
+          <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
+          <aside class="entry__menu-panel" data-menu-panel>
           <button type="button" class="entry__menu-close" @click="closeMenu">
             <span class="entry__menu-close-mask">
               <span class="entry__menu-close-inner" data-menu-reveal>
@@ -209,7 +211,8 @@ function enterBlog(): void {
               </a>
             </div>
           </footer>
-        </aside>
+          </aside>
+        </div>
       </div>
     </div>
   </div>
@@ -458,41 +461,48 @@ function enterBlog(): void {
   pointer-events: none;
 }
 
+.entry__menu-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
 .entry__menu-layer,
 .entry__menu-panel {
   position: absolute;
   top: 0;
   height: 100%;
-  /* 以右缘（屏幕侧）为轴，三层依次向左滑入 */
+  /* 统一以浏览器右缘为变换原点，层间无位移缝隙 */
   transform-origin: right center;
-  will-change: transform;
+  backface-visibility: hidden;
+  will-change: transform, clip-path;
 }
 
+/* 黑色贴浏览器右缘 → 紫 → 白，绝对定位保证零间隙 */
 .entry__menu-layer--1 {
-  left: 0;
+  right: 0;
   width: var(--menu-layer-1-w);
   background: #0a0e1a;
-  z-index: 1;
+  z-index: 3;
 }
 
 .entry__menu-layer--2 {
-  left: var(--menu-layer-1-w);
+  right: var(--menu-layer-1-w);
   width: var(--menu-layer-2-w);
   background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
   z-index: 2;
 }
 
 .entry__menu-panel {
-  left: calc(var(--menu-layer-1-w) + var(--menu-layer-2-w));
+  right: calc(var(--menu-layer-1-w) + var(--menu-layer-2-w));
   width: var(--menu-panel-w);
-  z-index: 3;
+  z-index: 1;
   padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
   background: #fafafa;
   color: #0a0a0b;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
-  box-shadow: -20px 0 48px rgba(0, 0, 0, 0.14);
 }
 
 .entry__menu-close {

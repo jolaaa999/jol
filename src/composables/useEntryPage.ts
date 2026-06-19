@@ -8,6 +8,14 @@ export interface EntryMenuItem {
   href: string
 }
 
+/** 白色面板 clip-path：从左向右裁切，从浏览器右缘向左露出 */
+const MENU_PANEL_CLIP_CLOSED = 'inset(0 0 0 100%)'
+const MENU_PANEL_CLIP_OPEN = 'inset(0 0 0 0)'
+
+/** 菜单开合缓动：与 --ease-damped 一致的机械阻尼感 */
+const MENU_EASE = 'power2.inOut'
+const MENU_EASE_OUT = 'power3.out'
+
 /** 入口页 GSAP 编排：Hero 逐字冒起 + 三层递进覆盖菜单 */
 export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
   const menuOpen = ref(false)
@@ -67,21 +75,23 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     }
   }
 
-  /** 菜单层初始：以右缘为轴，全部收在各自右侧（待向左滑入） */
+  /** 菜单层初始：色带 scaleX 收拢于右缘，白面板 clip 隐藏 */
   function initMenuClosed(): void {
     if (!rootRef.value) return
 
     const { layer1, layer2, panel, backdrop, revealEls } = getMenuLayers(rootRef.value)
 
-    gsap.set([layer1, layer2, panel], {
-      xPercent: 100,
+    gsap.set([layer1, layer2], {
+      scaleX: 0,
       transformOrigin: 'right center',
+      force3D: true,
     })
+    gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
     gsap.set(backdrop, { opacity: 0 })
     gsap.set(revealEls, { yPercent: 110, opacity: 0 })
   }
 
-  /** 菜单打开：黑 → 紫 → 白，三层依次从右缘向左滑入 */
+  /** 菜单打开：黑 → 紫 → 白，从浏览器右缘连续向左展开（无缝隙） */
   function openMenu(): void {
     if (!rootRef.value || menuOpen.value || isAnimating.value) return
 
@@ -100,45 +110,57 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     })
 
     if (reduced) {
-      gsap.set([layer1, layer2, panel], {
-        xPercent: 0,
-        transformOrigin: 'right center',
-      })
+      gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: 'right center' })
+      gsap.set(panel, { clipPath: MENU_PANEL_CLIP_OPEN })
       gsap.set(backdrop, { opacity: 1 })
       gsap.set(revealEls, { yPercent: 0, opacity: 1 })
       isAnimating.value = false
       return
     }
 
-    gsap.set([layer1, layer2, panel], {
-      xPercent: 100,
+    gsap.set([layer1, layer2], {
+      scaleX: 0,
       transformOrigin: 'right center',
+      force3D: true,
     })
+    gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
     gsap.set(backdrop, { opacity: 0 })
     gsap.set(revealEls, { yPercent: 110, opacity: 0 })
 
     menuTimeline
-      .to(backdrop, { opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
-      /* 黑色层最先从右缘向左滑入 */
-      .to(layer1, { xPercent: 0, duration: 0.52, ease: 'power3.inOut' }, 0.05)
-      /* 紫色层紧随其后 */
-      .to(layer2, { xPercent: 0, duration: 0.54, ease: 'power3.inOut' }, 0.13)
-      /* 白色面板最后向左滑入 */
-      .to(panel, { xPercent: 0, duration: 0.6, ease: 'power3.inOut' }, 0.21)
+      .to(backdrop, { opacity: 1, duration: 0.75, ease: 'power2.out' }, 0)
+      /* 黑色条：贴右缘 scaleX 展开，像从屏幕侧面推出 */
+      .to(
+        layer1,
+        { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
+        0,
+      )
+      /* 紫色条：紧挨黑色向左延伸，时序重叠保证连贯 */
+      .to(
+        layer2,
+        { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
+        0.09,
+      )
+      /* 白色面板：clip 从左向右打开，文字不被 scale 挤压 */
+      .to(
+        panel,
+        { clipPath: MENU_PANEL_CLIP_OPEN, duration: 0.62, ease: MENU_EASE },
+        0.18,
+      )
       .to(
         revealEls,
         {
           yPercent: 0,
           opacity: 1,
-          duration: 0.76,
-          stagger: { each: 0.085, ease: 'power2.out' },
-          ease: 'power4.out',
+          duration: 0.68,
+          stagger: { each: 0.052, ease: 'power2.out' },
+          ease: MENU_EASE_OUT,
         },
-        '-=0.12',
+        0.42,
       )
   }
 
-  /** 菜单关闭：文字收回 → 白 → 紫 → 黑，逆序向右收回 */
+  /** 菜单关闭：文字收回 → 白 → 紫 → 黑，逆序贴右缘收回 */
   function closeMenu(): void {
     if (!rootRef.value || !menuOpen.value || isAnimating.value) return
 
@@ -170,26 +192,26 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       .to(revealEls, {
         yPercent: 110,
         opacity: 0,
-        duration: 0.28,
-        stagger: 0.025,
+        duration: 0.22,
+        stagger: { each: 0.014, ease: 'power2.in' },
         ease: 'power2.in',
       })
       .to(
         panel,
-        { xPercent: 100, duration: 0.52, ease: 'power3.inOut', transformOrigin: 'right center' },
-        '-=0.06',
+        { clipPath: MENU_PANEL_CLIP_CLOSED, duration: 0.48, ease: MENU_EASE },
+        '-=0.02',
       )
       .to(
         layer2,
-        { xPercent: 100, duration: 0.5, ease: 'power3.inOut', transformOrigin: 'right center' },
-        0.28,
+        { scaleX: 0, duration: 0.46, ease: MENU_EASE, force3D: true },
+        '-=0.34',
       )
       .to(
         layer1,
-        { xPercent: 100, duration: 0.48, ease: 'power3.inOut', transformOrigin: 'right center' },
-        0.36,
+        { scaleX: 0, duration: 0.44, ease: MENU_EASE, force3D: true },
+        '-=0.34',
       )
-      .to(backdrop, { opacity: 0, duration: 0.38, ease: 'power2.in' }, '-=0.32')
+      .to(backdrop, { opacity: 0, duration: 0.48, ease: 'power2.in' }, '-=0.36')
   }
 
   function toggleMenu(): void {
