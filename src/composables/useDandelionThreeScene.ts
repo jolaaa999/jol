@@ -68,6 +68,16 @@ const BLADE_SPEED_REF = 24
 const AMBIENT_WIND_IDLE = 0.018
 /** 有鼠标时环境风强度倍率 */
 const AMBIENT_WIND_HOVER = 0.03
+/** 自然态茎秆左右摇摆幅度 */
+const IDLE_SWAY_AMP = 0.48
+/** 自然态茎秆摇摆主频（弧度/ms） */
+const IDLE_SWAY_FREQ = 0.00108
+/** 慢速悬停上限 — 低于此视为触碰避让，高于此进入划散判定 */
+const SLOW_HOVER_MAX_SPEED = 2.8
+/** 光粒子鼠标避让强度 */
+const MOUSE_REPEL_FLUFF = 1.22
+/** 光粒子鼠标避让半径（相对花头半径） */
+const MOUSE_REPEL_RADIUS_RATIO = 0.62
 /** Bloom 强度（idle 下粒子白金光晕） */
 const BLOOM_STRENGTH = 0.44
 /** Bloom 扩散半径 */
@@ -143,7 +153,7 @@ function createGlowTexture(): THREE.CanvasTexture {
   return tex
 }
 
-/** 计算鼠标位置对目标点的风力扰动 */
+/** 计算鼠标位置对目标点的风力扰动（吸引方向 — 仅快划时用于茎秆） */
 function computeMouseWind(
   mouse: Vec2,
   target: Vec2,
@@ -160,6 +170,27 @@ function computeMouseWind(
   return {
     x: (dx / dist) * strength * falloff,
     y: (dy / dist) * strength * falloff * 0.85,
+  }
+}
+
+/** 计算鼠标对光粒子的避让斥力 — 沿「粒子 → 鼠标」反方向推开 */
+function computeMouseRepel(
+  mouse: Vec2,
+  target: Vec2,
+  radius: number,
+  strength: number,
+): Vec2 {
+  const dx = target.x - mouse.x
+  const dy = target.y - mouse.y
+  const distSq = dx * dx + dy * dy
+  const rSq = radius * radius
+  if (distSq > rSq || distSq < 1) return { x: 0, y: 0 }
+  const dist = Math.sqrt(distSq)
+  /** 越靠近光标斥力越强，边缘柔和衰减 */
+  const falloff = (1 - dist / radius) ** 2.15
+  return {
+    x: (dx / dist) * strength * falloff,
+    y: (dy / dist) * strength * falloff * 0.92,
   }
 }
 
@@ -245,6 +276,8 @@ export function useDandelionThreeScene(
   const spreadProgress = ref(0)
   /** 末段白光强度 [0, 1] — 供 Landing 亮光过渡层使用 */
   const lightIntensity = ref(0)
+  /** 场景是否完整就绪 — 首帧渲染稳定后才允许指针交互 */
+  const sceneReady = ref(false)
 
   /** WebGL 渲染器 */
   let renderer: THREE.WebGLRenderer | null = null
@@ -299,9 +332,21 @@ export function useDandelionThreeScene(
   let headSpread = 120
   /** 花头像素坐标 */
   let headPx = { x: 0, y: 0 }
+  /** 连续成功渲染帧计数 — 用于判定场景就绪 */
+  let readyFrameCount = 0
+
+  /** 场景重建时重置就绪态，并清空指针缓存避免「幽灵」交互 */
+  function resetSceneReady(): void {
+    sceneReady.value = false
+    readyFrameCount = 0
+    mouse = null
+    prevMouse = null
+    mouseSpeed = 0
+  }
 
   /** 构建茎秆、绒球粒子与物理引擎 */
   function buildScene(width: number, height: number): void {
+    resetSceneReady()
     canvasW = width
     canvasH = height
 
@@ -371,8 +416,9 @@ export function useDandelionThreeScene(
         a: headEngineId,
         b: engineId,
         restLength: clampedDist,
-        stiffness: 0.045 + Math.random() * 0.025,
-        damping: 0.028,
+        /** 略提高刚度，鼠标离开后光粒子更快归位 */
+        stiffness: 0.052 + Math.random() * 0.028,
+        damping: 0.03,
       })
 
       fluffParticles.push({
@@ -613,11 +659,11 @@ export function useDandelionThreeScene(
     }
   }
 
-  /** 静止态物理 — 无鼠标时仅轻微环境风，有鼠标时按移动速度施加扰动 */
+  /** 静止态物理 — 自然左右摇摆；慢速悬停时粒子避让，快划时刀刃吹散 */
   function updateIdlePhysics(time: number, dt: number): void {
     if (!engine) return
     const head = engine.particles[headEngineId]
-    const hasMouse = mouse !== null
+    const hasMouse = sceneReady.value && mouse !== null
     const headDist = hasMouse
       ? Math.hypot(mouse!.x - head.x, mouse!.y - head.y)
       : Infinity
@@ -627,11 +673,17 @@ export function useDandelionThreeScene(
       : 0
     /** 快划时非线性放大，慢移几乎无冲击 */
     const swipeIntensity = hasMouse ? computeSwipeIntensity(mouseSpeed) : 0
-    const moveFactor = hasMouse ? 0.06 + swipeIntensity * 0.94 : 0
+    const isFastSwipe = hasMouse && mouseSpeed > SLOW_HOVER_MAX_SPEED
+    const moveFactor = isFastSwipe ? 0.06 + swipeIntensity * 0.94 : 0
     const ambientScale = hasMouse ? AMBIENT_WIND_HOVER : AMBIENT_WIND_IDLE
     const fsStem = dt * 0.003
-    const fsFluff = dt * 0.0022 * (1 + swipeIntensity * 3.2)
-    const useBlade = hasMouse && prevMouse && mouseSpeed > 2.5
+    const fsFluff = dt * 0.0022 * (1 + (isFastSwipe ? swipeIntensity * 3.2 : 0))
+    const useBlade = isFastSwipe && prevMouse && mouseSpeed > 2.5
+
+    /** 双频正弦叠加 — 自然态左右往复摇摆，而非单向偏移 */
+    const swayPrimary = Math.sin(time * IDLE_SWAY_FREQ) * IDLE_SWAY_AMP
+    const swaySecondary = Math.sin(time * IDLE_SWAY_FREQ * 0.53 + 0.9) * IDLE_SWAY_AMP * 0.36
+    const swayX = swayPrimary + swaySecondary
 
     engine.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
@@ -639,7 +691,8 @@ export function useDandelionThreeScene(
       if (i <= headEngineId) {
         const nodeFactor = i / (STEM_NODES - 1)
         const ambient = sharedPerlin.sampleWindField(p.x, p.y, time, 0.0018, 2)
-        const gust = hasMouse
+        /** 快划时才让茎秆响应鼠标风；自然态仅靠环境风 + 左右摇摆 */
+        const gust = isFastSwipe
           ? computeMouseWind(
               mouse!,
               head,
@@ -648,22 +701,26 @@ export function useDandelionThreeScene(
             )
           : { x: 0, y: 0 }
         return {
-          x: (gust.x * nodeFactor * 0.65 + ambient.x * ambientScale * nodeFactor) * fsStem,
+          x: (gust.x * nodeFactor * 0.65 + ambient.x * ambientScale * nodeFactor + swayX * nodeFactor * nodeFactor) * fsStem,
           y: (gust.y * nodeFactor * 0.55 + ambient.y * ambientScale * nodeFactor) * fsStem,
         }
       }
 
       const wind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.0035, 2)
+      const repelRadius = headSpread * MOUSE_REPEL_RADIUS_RATIO
+      /** 慢速靠近：斥力避让；快划：刀刃风场叠加轻微斥力 */
+      const repel = hasMouse
+        ? computeMouseRepel(mouse!, p, repelRadius, MOUSE_REPEL_FLUFF)
+        : { x: 0, y: 0 }
       const fluffStrength = (MOUSE_WIND_FLUFF + hoverPull * 0.14) * moveFactor
       const fluffRadius = headSpread * (useBlade ? 0.78 : 0.6)
-      const mouseWind = hasMouse
-        ? useBlade
-          ? computeBladeWind(prevMouse!, mouse!, p, mouseSpeed, fluffRadius, fluffStrength)
-          : computeMouseWind(mouse!, p, fluffRadius, fluffStrength)
+      const blade = useBlade
+        ? computeBladeWind(prevMouse!, mouse!, p, mouseSpeed, fluffRadius, fluffStrength)
         : { x: 0, y: 0 }
+
       return {
-        x: (wind.x * ambientScale * 3.2 + mouseWind.x) * fsFluff,
-        y: (wind.y * ambientScale * 2.4 + mouseWind.y) * fsFluff,
+        x: (wind.x * ambientScale * 3.2 + repel.x + blade.x * 0.85) * fsFluff,
+        y: (wind.y * ambientScale * 2.4 + repel.y + blade.y * 0.85) * fsFluff,
       }
     })
   }
@@ -848,6 +905,14 @@ export function useDandelionThreeScene(
 
     if (phase.value === 'idle') {
       mouseSpeed *= 0.82
+      /** 无快划时预热衰减，避免悬停后误触发吹散 */
+      if (!mouse || mouseSpeed < SLOW_HOVER_MAX_SPEED) {
+        for (const fp of fluffParticles) {
+          if (!fp.detached && fp.warmup > 0) {
+            fp.warmup = Math.max(0, fp.warmup - dt * 0.0016)
+          }
+        }
+      }
       updateIdlePhysics(timestamp, dt)
       updateIdleVisuals(timestamp)
     } else if (phase.value === 'blowing' || phase.value === 'spreading') {
@@ -888,11 +953,29 @@ export function useDandelionThreeScene(
     }
 
     composer.render()
+
+    /** 至少 2 帧完整渲染后才开放指针交互，避免初始化阶段误触 */
+    if (
+      engine &&
+      composer &&
+      points &&
+      fluffParticles.length > 0 &&
+      canvasW > 0 &&
+      canvasH > 0
+    ) {
+      readyFrameCount++
+      if (readyFrameCount >= 2) {
+        sceneReady.value = true
+      }
+    }
+
     rafId = requestAnimationFrame(tick)
   }
 
-  /** 指针移动 — 预热检测与吹散触发 */
+  /** 指针移动 — 预热检测与吹散触发（场景未就绪时忽略） */
   function onPointerMove(e: PointerEvent): void {
+    if (!sceneReady.value) return
+
     const canvas = canvasRef.value
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
@@ -1017,6 +1100,7 @@ export function useDandelionThreeScene(
     phase,
     spreadProgress,
     lightIntensity,
+    sceneReady,
     onPointerMove,
     onPointerLeave,
     triggerBlow,

@@ -19,7 +19,7 @@ const lightFade = ref(0)
 const dandelionVisible = ref(true)
 
 /** 蒲公英场景阶段、飘散进度、白光强度及指针交互 */
-const { phase, lightIntensity, onPointerMove, onPointerLeave } = useDandelionThreeScene(
+const { phase, lightIntensity, sceneReady, onPointerMove, onPointerLeave } = useDandelionThreeScene(
   dandelionCanvasRef,
   {
     spreadDuration: 3200,
@@ -85,8 +85,8 @@ function onUnlockComplete(): void {
   router.push('/entry')
 }
 
-/** 空闲阶段且未解锁时显示操作提示 */
-const showHint = computed(() => phase.value === 'idle' && !unlockRevealed.value)
+/** 空闲阶段且场景就绪、未解锁时显示操作提示 */
+const showHint = computed(() => sceneReady.value && phase.value === 'idle' && !unlockRevealed.value)
 
 /** 全屏亮光层：飘散末段渐亮 + 解锁时消退 */
 const lightWashOpacity = computed(() => {
@@ -96,7 +96,7 @@ const lightWashOpacity = computed(() => {
 </script>
 
 <template>
-  <div class="landing">
+  <div class="landing" :class="{ 'landing--ready': sceneReady }">
     <PoemUnlock
       :revealed="unlockRevealed"
       @ready="unlockReady = true"
@@ -107,6 +107,7 @@ const lightWashOpacity = computed(() => {
       v-show="dandelionVisible"
       ref="dandelionCanvasRef"
       class="layer layer-dandelion"
+      :class="{ 'layer-dandelion--ready': sceneReady }"
       aria-label="交互式蒲公英，鼠标划过会吹散"
       @pointermove="onPointerMove"
       @pointerleave="onPointerLeave"
@@ -132,13 +133,17 @@ const lightWashOpacity = computed(() => {
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  cursor: crosshair;
+  cursor: default;
   user-select: none;
   background:
     radial-gradient(circle at 15% 12%, rgba(240, 225, 180, 0.35), transparent 32%),
     radial-gradient(circle at 88% 18%, rgba(235, 215, 165, 0.28), transparent 28%),
     radial-gradient(circle at 50% 100%, rgba(200, 170, 110, 0.22), transparent 36%),
     linear-gradient(168deg, #ede0c4 0%, #e0d0a8 38%, #d4c490 68%, #c8b878 100%);
+}
+
+.landing--ready {
+  cursor: crosshair;
 }
 
 .layer {
@@ -151,6 +156,10 @@ const lightWashOpacity = computed(() => {
 
 .layer-dandelion {
   z-index: 60;
+  pointer-events: none;
+}
+
+.layer-dandelion--ready {
   pointer-events: auto;
 }
 
