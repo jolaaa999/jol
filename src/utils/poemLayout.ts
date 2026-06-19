@@ -1,5 +1,6 @@
 import type { PoemArticle, PoemLayout, PoemCharSlot } from '@/types/poem'
 
+/** 中文标点集合 — 挖空时排除 */
 const PUNCT = new Set('，。、；：？！…—·')
 
 /** 解锁页固定诗文 */
@@ -9,8 +10,10 @@ export const UNLOCK_POEM: PoemArticle = {
   content: '青丝渡香腮\n半手抚柔面',
 }
 
+/** 解锁页固定挖空字符 */
 export const UNLOCK_BLANK_CHARS = ['抚', '渡'] as const
 
+/** 随机挖空指定数量的字，构建竖排诗词布局 */
 export function buildPoemLayout(
   article: PoemArticle,
   blankCount = 3,
@@ -64,11 +67,13 @@ export function buildPoemLayout(
   }
 }
 
+/** 收集干扰字符池 — 诗文用字 + 常见意象字 */
 export function collectDistractorChars(layout: PoemLayout): string[] {
   const set = new Set<string>()
   for (const s of layout.slots) {
     if (!PUNCT.has(s.char)) set.add(s.char)
   }
+  /** 干扰字扩展意象字符集 */
   const extras = '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露'
   for (const c of extras) set.add(c)
   return [...set]
@@ -104,6 +109,7 @@ export function buildBackgroundCharPool(layout: PoemLayout): string[] {
   for (const s of layout.slots) {
     if (!PUNCT.has(s.char)) pool.push(s.char)
   }
+  /** 背景铺陈扩展字符集（含本篇诗文意象） */
   const extras =
     '风花雪月云雾山水天地光影梦境诗词书画琴酒竹梅兰菊江河湖海星辰雨露半手柔面青丝香腮'
   for (let r = 0; r < 6; r++) {
@@ -116,6 +122,7 @@ export function buildBackgroundCharPool(layout: PoemLayout): string[] {
   return pool
 }
 
+/** 汇总所有需加载字形的字符 */
 export function collectAllFontChars(layout: PoemLayout): string {
   return (
     layout.slots.map((s) => s.char).join('') +
@@ -125,6 +132,7 @@ export function collectAllFontChars(layout: PoemLayout): string {
   )
 }
 
+/** 从文章列表中随机选取一首 */
 export function pickRandomPoem(
   articles: PoemArticle[],
 ): PoemArticle {

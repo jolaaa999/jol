@@ -3,19 +3,26 @@ import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGsapNav, type NavSegment } from '@/composables/useGsapNav'
 
+/** 导航栏根元素引用 */
 const navRef = ref<HTMLElement | null>(null)
+/** 底部活动指示条元素引用 */
 const indicatorRef = ref<HTMLElement | null>(null)
 
+/** 主导航分段配置 */
 const segments: NavSegment[] = [
   { id: 'home', label: '首页', href: '/blog' },
   { id: 'posts', label: '文章', href: '/posts' },
   { id: 'about', label: '关于', href: '/about' },
 ]
 
+/** GSAP 导航指示条动画与悬停交互 */
 const { animateIndicator, hoverSegment } = useGsapNav(navRef, segments)
+/** Vue Router 实例 */
 const router = useRouter()
+/** 当前路由信息 */
 const route = useRoute()
 
+/** 点击导航分段：驱动指示条动画并路由跳转 */
 function onSegmentClick(index: number, href: string): void {
   if (indicatorRef.value) animateIndicator(indicatorRef.value, index)
   if (route.path !== href) router.push(href)

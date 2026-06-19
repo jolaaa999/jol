@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 毛玻璃卡片组件属性定义 */
 defineProps<{
   /** 卡片标题 */
   title: string

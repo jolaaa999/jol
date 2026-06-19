@@ -1,4 +1,5 @@
 <script setup lang="ts">
+/** 应用外壳布局：粒子背景 + 导航栏 + 主内容插槽 */
 import NavBar from './NavBar.vue'
 import ParticleCanvas from '@/components/canvas/ParticleCanvas.vue'
 </script>

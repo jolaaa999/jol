@@ -7,52 +7,57 @@ import { PhysicsEngine, type Vec2 } from './usePhysicsEngine'
 import { sharedPerlin } from '@/utils/perlinNoise'
 import { getLandingLayout } from '@/composables/landingLayout'
 
-/**
- * 蒲公英三维场景的运行阶段。
- */
+/** 蒲公英 Three.js 场景阶段 */
 export type DandelionPhase = 'idle' | 'blowing' | 'spreading' | 'done'
 
-/**
- * `useDandelionThreeScene` 的可选配置项。
- */
+/** useDandelionThreeScene 配置 */
 export interface DandelionThreeOptions {
   /** 吹散后飘满屏幕的时长 (ms) */
   spreadDuration?: number
-  /** 场景完成过渡后的回调。 */
+  /** 过渡动画结束回调 */
   onTransitionComplete?: () => void
 }
 
-/**
- * 单个绒毛粒子的内部状态。
- */
+/** 绒球粒子运行时数据 */
 interface FluffParticle {
+  /** 物理引擎粒子索引 */
   engineId: number
+  /** 是否已脱离花头 */
   detached: boolean
+  /** 像素 X 坐标 */
   px: number
+  /** 像素 Y 坐标 */
   py: number
+  /** X 方向速度 */
   vx: number
+  /** Y 方向速度 */
   vy: number
+  /** 距花头中心的距离 */
   distFromCenter: number
+  /** 径向层级（0 内 → 2 外） */
   layer: number
+  /** 吹散预热值 [0, 1] */
   warmup: number
+  /** 金色调混合比 */
   goldMix: number
+  /** 深度 Z 偏移 */
   z: number
 }
 
-/** 茎秆上的节点数量，决定主干的分段精度。 */
+/** 茎秆节点数量 */
 const STEM_NODES = 8
-/** 绒毛粒子的总数。 */
+/** 绒球粒子总数 */
 const PARTICLE_COUNT = 1280
-/** 绒毛点精灵的显示尺寸。 */
+/** 粒子点精灵尺寸 */
 const PARTICLE_SIZE = 4.3
-/** 渲染时允许使用的最大设备像素比。 */
+/** 最大设备像素比 */
 const MAX_DPR = 2
-/** 用于均匀分布粒子的黄金角。 */
+/** 黄金角 — 向日葵/蒲公英分布 */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+/** 默认吹散铺满屏幕时长 (ms) */
+const DEFAULT_SPREAD_MS = 2800
 
-/**
- * 生成与 `Landing.vue` CSS 保持一致的麦黄田园渐变贴图，供 WebGL 背景使用。
- */
+/** 与 Landing.vue CSS 一致的麦黄田园渐变，供 WebGL 不透明渲染（Bloom 会盖住下层 CSS） */
 function createPastoralGradientTexture(width: number, height: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   const w = Math.max(1, Math.floor(width))
@@ -61,6 +66,7 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
   canvas.height = h
   const ctx = canvas.getContext('2d')!
 
+  /** 线性渐变角度（与 CSS 168deg 对齐） */
   const angle = ((168 - 90) * Math.PI) / 180
   const cx = w / 2
   const cy = h / 2
@@ -78,6 +84,7 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
   ctx.fillStyle = linear
   ctx.fillRect(0, 0, w, h)
 
+  /** 叠加径向光斑层 */
   const addRadial = (px: number, py: number, inner: string, radiusFrac: number): void => {
     const r = Math.max(w, h) * radiusFrac
     const g = ctx.createRadialGradient(px * w, py * h, 0, px * w, py * h, r)
@@ -96,10 +103,9 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
   return tex
 }
 
-/**
- * 生成绒毛高亮使用的柔光纹理。
- */
+/** 创建粒子发光贴图 */
 function createGlowTexture(): THREE.CanvasTexture {
+  /** 发光贴图分辨率（像素） */
   const size = 64
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -117,9 +123,7 @@ function createGlowTexture(): THREE.CanvasTexture {
   return tex
 }
 
-/**
- * 根据鼠标与目标点的距离计算局部风力向量。
- */
+/** 计算鼠标位置对目标点的风力扰动 */
 function computeMouseWind(
   mouse: Vec2,
   target: Vec2,
@@ -139,50 +143,72 @@ function computeMouseWind(
   }
 }
 
-/**
- * 将像素坐标转换为以画布中心为原点的世界坐标。
- */
+/** 像素坐标转正交相机世界坐标 */
 function pxToWorld(px: number, py: number, w: number, h: number): THREE.Vector3 {
   return new THREE.Vector3(px - w / 2, h / 2 - py, 0)
 }
 
+/** 蒲公英 Three.js WebGL 场景 Composable */
 export function useDandelionThreeScene(
   canvasRef: Ref<HTMLCanvasElement | null>,
   options: DandelionThreeOptions = {},
 ) {
-  const { spreadDuration = 2800, onTransitionComplete } = options
+  const { spreadDuration = DEFAULT_SPREAD_MS, onTransitionComplete } = options
 
+  /** 当前蒲公英阶段 */
   const phase = ref<DandelionPhase>('idle')
+  /** 过渡淡出不透明度 [0, 1] */
   const fadeOpacity = ref(1)
 
+  /** WebGL 渲染器 */
   let renderer: THREE.WebGLRenderer | null = null
+  /** Three.js 场景 */
   let scene: THREE.Scene | null = null
+  /** 正交相机 */
   let camera: THREE.OrthographicCamera | null = null
+  /** 后处理合成器 */
   let composer: EffectComposer | null = null
+  /** Verlet 物理引擎 */
   let engine: PhysicsEngine | null = null
+  /** 绒球粒子运行时列表 */
   let fluffParticles: FluffParticle[] = []
+  /** 粒子 Points 对象 */
   let points: THREE.Points | null = null
+  /** 粒子位置缓冲属性 */
   let posAttr: THREE.BufferAttribute | null = null
+  /** 粒子颜色缓冲属性 */
   let colorAttr: THREE.BufferAttribute | null = null
+  /** 茎秆线段 */
   let stemLine: THREE.Line | null = null
+  /** 花头光晕 Mesh */
   let headGlow: THREE.Mesh | null = null
+  /** 粒子发光贴图 */
   let glowTexture: THREE.CanvasTexture | null = null
+  /** 麦黄田园背景贴图 */
   let backgroundTexture: THREE.CanvasTexture | null = null
 
+  /** 当前鼠标位置 */
   let mouse: Vec2 | null = null
+  /** 上一帧鼠标位置 */
   let prevMouse: Vec2 | null = null
+  /** 花头物理粒子索引 */
   let headEngineId = 0
+  /** requestAnimationFrame 句柄 */
   let rafId = 0
+  /** 上一帧时间戳 */
   let lastTimestamp = 0
+  /** 吹散阶段起始时间 */
   let spreadStartTime = 0
+  /** 画布宽度（像素） */
   let canvasW = 0
+  /** 画布高度（像素） */
   let canvasH = 0
+  /** 花头展开半径 */
   let headSpread = 120
+  /** 花头像素坐标 */
   let headPx = { x: 0, y: 0 }
 
-  /**
-   * 构建或重建整个蒲公英场景的物理与几何结构。
-   */
+  /** 构建茎秆、绒球粒子与物理引擎 */
   function buildScene(width: number, height: number): void {
     canvasW = width
     canvasH = height
@@ -273,9 +299,7 @@ export function useDandelionThreeScene(
     updateStemLine()
   }
 
-  /**
-   * 重建绒毛粒子的几何体与材质。
-   */
+  /** 重建粒子点云几何体 */
   function rebuildPointsGeometry(): void {
     if (!scene) return
 
@@ -322,6 +346,7 @@ export function useDandelionThreeScene(
     scene.add(points)
   }
 
+  /** 更新茎秆线段与花头光晕 */
   function updateStemLine(): void {
     if (!scene || !engine) return
 
@@ -369,6 +394,7 @@ export function useDandelionThreeScene(
     scene.add(headGlow)
   }
 
+  /** 更新田园渐变背景纹理 */
   function updateSceneBackground(width: number, height: number): void {
     if (!scene) return
     backgroundTexture?.dispose()
@@ -376,6 +402,7 @@ export function useDandelionThreeScene(
     scene.background = backgroundTexture
   }
 
+  /** 初始化 WebGL 渲染器与后处理 */
   function initRenderer(): void {
     const canvas = canvasRef.value
     if (!canvas || renderer) return
@@ -410,6 +437,7 @@ export function useDandelionThreeScene(
     buildScene(w, h)
   }
 
+  /** 同步粒子位置到 BufferAttribute */
   function syncPointPositions(): void {
     if (!posAttr || !engine) return
 
@@ -435,6 +463,7 @@ export function useDandelionThreeScene(
     posAttr.needsUpdate = true
   }
 
+  /** 更新茎秆顶点位置 */
   function updateStemPositions(): void {
     if (!stemLine || !engine) return
     const attr = stemLine.geometry.getAttribute('position') as THREE.BufferAttribute
@@ -454,6 +483,7 @@ export function useDandelionThreeScene(
     }
   }
 
+  /** 静止态物理 — 风场与鼠标扰动 */
   function updateIdlePhysics(time: number, dt: number): void {
     if (!engine) return
     const head = engine.particles[headEngineId]
@@ -487,6 +517,7 @@ export function useDandelionThreeScene(
     })
   }
 
+  /** 断开所有绒球粒子与花头的弹簧 */
   function detachAll(): void {
     if (!engine) return
     const head = engine.particles[headEngineId]
@@ -520,6 +551,7 @@ export function useDandelionThreeScene(
     }
   }
 
+  /** 已脱离粒子的自由飘动物理 */
   function updateDetachedPhysics(time: number, dt: number): void {
     const dtSec = dt * 0.055
     const cx = canvasW / 2
@@ -553,6 +585,7 @@ export function useDandelionThreeScene(
     }
   }
 
+  /** 触发吹散 — 脱离粒子并施加冲量 */
   function triggerBlow(originX?: number, originY?: number): void {
     if (phase.value !== 'idle' || !engine) return
     phase.value = 'blowing'
@@ -575,6 +608,7 @@ export function useDandelionThreeScene(
     }, 120)
   }
 
+  /** 主渲染循环 */
   function tick(timestamp: number): void {
     if (!lastTimestamp) lastTimestamp = timestamp
     const dt = Math.min(timestamp - lastTimestamp, 32)
@@ -639,6 +673,7 @@ export function useDandelionThreeScene(
     rafId = requestAnimationFrame(tick)
   }
 
+  /** 指针移动 — 预热检测与吹散触发 */
   function onPointerMove(e: PointerEvent): void {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -689,11 +724,13 @@ export function useDandelionThreeScene(
     }
   }
 
+  /** 指针离开画布 */
   function onPointerLeave(): void {
     mouse = null
     prevMouse = null
   }
 
+  /** 释放 GPU 资源 */
   function dispose(): void {
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', onResize)
@@ -723,6 +760,7 @@ export function useDandelionThreeScene(
     backgroundTexture = null
   }
 
+  /** 窗口 resize 处理 */
   function onResize(): void {
     const canvas = canvasRef.value
     if (!canvas || !renderer || !camera) return

@@ -2,7 +2,9 @@
 import { ref } from 'vue'
 import { useDandelionScene } from '@/composables/useDandelionScene'
 
+/** 背景蒲公英粒子画布引用 */
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+/** 挂载 2D 蒲公英粒子背景场景 */
 useDandelionScene(canvasRef)
 </script>
 

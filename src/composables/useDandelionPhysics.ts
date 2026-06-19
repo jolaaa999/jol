@@ -5,8 +5,10 @@ import { getLandingLayout } from '@/composables/landingLayout'
 
 // ─── 类型 ───────────────────────────────────────────────────────────────────
 
+/** 蒲公英 Canvas 物理场景阶段 */
 export type DandelionPhase = 'idle' | 'blowing' | 'fading' | 'done'
 
+/** useDandelionPhysics 配置 */
 export interface DandelionPhysicsOptions {
   /** 吹散动画时长 (ms) */
   blowDuration?: number
@@ -16,60 +18,103 @@ export interface DandelionPhysicsOptions {
   onTransitionComplete?: () => void
 }
 
+/** 风迹流线粒子 */
 interface WindTrail {
+  /** 当前 X 坐标 */
   x: number
+  /** 当前 Y 坐标 */
   y: number
+  /** X 方向速度 */
   vx: number
+  /** Y 方向速度 */
   vy: number
+  /** 剩余生命值 [0, maxLife] */
   life: number
+  /** 初始最大生命值 */
   maxLife: number
+  /** 流线宽度 */
   width: number
-  /** 0 = 粉, 1 = 蓝 */
+  /** 色调混合比（0 粉 → 1 蓝） */
   tint: number
+  /** 振荡相位 */
   phase: number
 }
 
+/** 绒球放射丝 */
 interface PappusBristle {
+  /** 放射角度（弧度） */
   angle: number
+  /** 丝长 */
   length: number
+  /** 丝粗 */
   thickness: number
+  /** 发光强度 */
   glow: number
+  /** 动画相位 */
   phase: number
-  /** 0 内层短绒, 1 中层, 2 外层长丝 */
+  /** 径向层级（0 内层短绒 → 2 外层长丝） */
   tier: number
 }
 
+/** 绒球种子运行时数据 */
 interface FluffSeed {
+  /** 相对花头中心的 X 偏移 */
   offsetX: number
+  /** 相对花头中心的 Y 偏移 */
   offsetY: number
+  /** 角度抖动量 */
   angleJitter: number
+  /** 当前 X 坐标 */
   x: number
+  /** 当前 Y 坐标 */
   y: number
+  /** 上一帧 X（Verlet 用） */
   prevX: number
+  /** 上一帧 Y（Verlet 用） */
   prevY: number
+  /** X 方向速度 */
   vx: number
+  /** Y 方向速度 */
   vy: number
+  /** 质量 */
   mass: number
+  /** 摩擦系数 */
   friction: number
+  /** 放射丝数组 */
   bristles: PappusBristle[]
+  /** 是否已脱离花头 */
   detached: boolean
+  /** 物理引擎粒子索引 */
   engineId: number
+  /** 距花头中心距离 */
   distFromCenter: number
+  /** 吹散预热值 [0, 1] */
   warmup: number
+  /** 径向层级 */
   layer: number
 }
 
 /** 全局光源 — 屏幕左上角 */
 const SUN = { x: -0.78, y: -0.62, intensity: 1.15 }
 
+/** 茎秆节点数量 */
 const STEM_NODES = 8
+/** 绒球种子数量 */
 const SEED_COUNT = 1280
+/** 风迹粒子最大数量 */
 const TRAIL_MAX = 28
+/** 最大设备像素比 */
 const MAX_DPR = 2
+/** 黄金角分布 */
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+/** 默认吹散动画时长 (ms) */
+const DEFAULT_BLOW_MS = 1500
+/** 默认淡出动画时长 (ms) */
+const DEFAULT_FADE_MS = 600
 
 // ─── 风力计算 ─────────────────────────────────────────────────────────────────
 
+/** 计算鼠标位置对目标的风力（含旋度扰动） */
 function computeMouseWind(
   mouse: Vec2,
   target: Vec2,
@@ -96,6 +141,7 @@ function computeMouseWind(
   }
 }
 
+/** 计算光标移动方向的风廊道扰动 */
 function computeCursorWind(
   mouse: Vec2,
   velocity: Vec2,
@@ -128,6 +174,7 @@ function computeCursorWind(
 
 // ─── 渲染辅助 ─────────────────────────────────────────────────────────────────
 
+/** 绘制茎秆曲线（分段渐变） */
 function drawStem(
   ctx: CanvasRenderingContext2D,
   nodes: readonly { x: number; y: number }[],
@@ -171,6 +218,7 @@ function drawStem(
   ctx.restore()
 }
 
+/** 绘制单颗绒球种子（星芒丝 + 光晕） */
 function drawFluffSeed(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -240,6 +288,7 @@ function drawFluffSeed(
   ctx.restore()
 }
 
+/** 绘制花头光晕 */
 function drawHead(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -272,6 +321,7 @@ function drawHead(
   ctx.restore()
 }
 
+/** 绘制根部椭圆 */
 function drawRoot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
   ctx.save()
   ctx.fillStyle = 'rgba(30, 65, 28, 0.85)'
@@ -285,7 +335,9 @@ function drawRoot(ctx: CanvasRenderingContext2D, x: number, y: number): void {
 
 /** 粉蓝梦幻流线色 — 呼应天空 dawn / mid 色调 */
 function trailColor(tint: number, alpha: number): { r: number; g: number; b: number; a: number } {
+  /** 晨曦粉色调 */
   const pink = { r: 255, g: 198, b: 228 }
+  /** 天空蓝色调 */
   const blue = { r: 148, g: 210, b: 255 }
   const t = tint * tint * (3 - 2 * tint)
   return {
@@ -296,43 +348,65 @@ function trailColor(tint: number, alpha: number): { r: number; g: number; b: num
   }
 }
 
+/** 蒲公英 Canvas 物理场景 Composable */
 export function useDandelionPhysics(
   canvasRef: Ref<HTMLCanvasElement | null>,
   options: DandelionPhysicsOptions = {},
 ) {
   const {
-    blowDuration = 1500,
-    fadeDuration = 600,
+    blowDuration = DEFAULT_BLOW_MS,
+    fadeDuration = DEFAULT_FADE_MS,
     onTransitionComplete,
   } = options
 
+  /** 当前蒲公英阶段 */
   const phase = ref<DandelionPhase>('idle')
+  /** 过渡淡出不透明度 [0, 1] */
   const fadeOpacity = ref(1)
 
+  /** 风场焦点（花头位置） */
   const focusPoint = ref({
     x: typeof window !== 'undefined' ? window.innerWidth * 0.5 : 0,
     y: typeof window !== 'undefined' ? window.innerHeight * 0.4 : 0,
   })
+  /** Verlet 物理引擎 */
   let engine: PhysicsEngine | null = null
+  /** 绒球种子列表 */
   let seeds: FluffSeed[] = []
+  /** 风迹流线粒子列表 */
   let trails: WindTrail[] = []
+  /** 当前鼠标位置 */
   let mouse: Vec2 | null = null
+  /** 上一帧鼠标位置 */
   let prevMouse: Vec2 | null = null
+  /** 鼠标移动速度向量 */
   let mouseVelocity: Vec2 = { x: 0, y: 0 }
+  /** 根部锚点坐标 */
   let rootPos: Vec2 = { x: 0, y: 0 }
+  /** 花头物理粒子索引 */
   let headEngineId = 0
+  /** requestAnimationFrame 句柄 */
   let rafId = 0
+  /** 上一帧时间戳 */
   let lastTimestamp = 0
+  /** 吹散阶段起始时间 */
   let blowStartTime = 0
+  /** 淡出阶段起始时间 */
   let fadeStartTime = 0
+  /** 画布宽度（像素） */
   let canvasW = 0
+  /** 画布高度（像素） */
   let canvasH = 0
+  /** 上次生成风迹的时间戳 */
   let lastTrailAt = 0
+  /** 花头展开半径 */
   let headSpread = 120
+  /** 花芯半径 */
   let coreRadius = 16
 
   // ── 场景初始化 ──
 
+  /** 构建茎秆、种子与物理引擎 */
   function buildScene(width: number, height: number): void {
     canvasW = width
     canvasH = height
@@ -447,6 +521,7 @@ export function useDandelionPhysics(
 
   // ── 风迹粒子 ──
 
+  /** 生成风迹流线粒子 */
   function spawnTrail(x: number, y: number, vx: number, vy: number): void {
     if (phase.value !== 'idle') return
     trails.push({
@@ -463,6 +538,7 @@ export function useDandelionPhysics(
     if (trails.length > TRAIL_MAX) trails.shift()
   }
 
+  /** 更新风迹粒子生命周期 */
   function updateTrails(dt: number): void {
     trails = trails.filter((t) => {
       t.life -= dt * 0.00085
@@ -475,6 +551,7 @@ export function useDandelionPhysics(
     })
   }
 
+  /** 绘制风迹流线 */
   function drawTrails(ctx: CanvasRenderingContext2D): void {
     if (trails.length === 0) return
     ctx.save()
@@ -521,10 +598,12 @@ export function useDandelionPhysics(
 
   // ── 物理更新 ──
 
+  /** 获取花头粒子 */
   function getHead(): Particle {
     return engine!.particles[headEngineId]
   }
 
+  /** 静止态物理更新 */
   function updateIdlePhysics(time: number, dt: number): void {
     const head = getHead()
     const mouseVec = mouse ?? head
@@ -561,6 +640,7 @@ export function useDandelionPhysics(
     })
   }
 
+  /** 断开种子与花头的弹簧约束 */
   function detachSeeds(): void {
     const head = getHead()
     const seedIds = new Set(seeds.map((s) => s.engineId))
@@ -587,6 +667,7 @@ export function useDandelionPhysics(
     }
   }
 
+  /** 已脱离种子的自由飘动 */
   function updateDetachedSeeds(time: number, dt: number): void {
     const dtSec = dt * 0.06
     for (const seed of seeds) {
@@ -608,6 +689,7 @@ export function useDandelionPhysics(
     }
   }
 
+  /** 吹散阶段物理 — 茎秆摇摆与种子预热 */
   function updateBlowingPhysics(time: number, dt: number): void {
     const head = getHead()
     const gustNoise = sharedPerlin.fbm(head.x * 0.002 + time * 0.00012, head.y * 0.002, 4)
@@ -657,6 +739,7 @@ export function useDandelionPhysics(
 
   // ── 渲染 ──
 
+  /** 渲染完整一帧 */
   function renderFrame(ctx: CanvasRenderingContext2D, time: number): void {
     ctx.clearRect(0, 0, canvasW, canvasH)
 
@@ -721,6 +804,7 @@ export function useDandelionPhysics(
 
   // ── 主循环 ──
 
+  /** 主循环 */
   function tick(timestamp: number): void {
     if (!lastTimestamp) lastTimestamp = timestamp
     const dt = Math.min(timestamp - lastTimestamp, 32)
@@ -781,6 +865,7 @@ export function useDandelionPhysics(
 
   // ── 交互 ──
 
+  /** 指针移动 — 风迹生成与吹散检测 */
   function onPointerMove(e: PointerEvent): void {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -854,12 +939,14 @@ export function useDandelionPhysics(
     }
   }
 
+  /** 指针离开 */
   function onPointerLeave(): void {
     mouse = null
     prevMouse = null
     mouseVelocity = { x: 0, y: 0 }
   }
 
+  /** 触发吹散动画 */
   function triggerBlow(originX?: number, originY?: number): void {
     if (phase.value !== 'idle' || !engine) return
     phase.value = 'blowing'
@@ -882,8 +969,8 @@ export function useDandelionPhysics(
     }
   }
 
+  /** 点击触发吹散（保留供外部兼容调用） */
   function onClick(): void {
-    // retained for external compatibility
     triggerBlow()
   }
 

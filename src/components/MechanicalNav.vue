@@ -2,16 +2,19 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import gsap from 'gsap'
 
+/** 机械导航子节点数据结构 */
 export interface MechanicalNavNode {
   id: string
   label: string
   to: string
 }
 
+/** 导航跳转时向父组件派发目标路径 */
 const emit = defineEmits<{
   navigate: [to: string]
 }>()
 
+/** 机械导航子节点配置 */
 const NODES: MechanicalNavNode[] = [
   { id: 'home', label: '首页', to: '/blog' },
   { id: 'poetry', label: '诗文', to: '/blog#poetry' },
@@ -20,26 +23,39 @@ const NODES: MechanicalNavNode[] = [
 
 /** 顺时针扇形展开角度（度，0 = 右，-90 = 上） */
 const FAN_ANGLES = [-90, -45, 0] as const
+/** 子节点相对轴心的展开半径（像素） */
 const FAN_RADIUS = 92
+/** GSAP 机械阻尼缓动曲线 */
 const MECHANICAL_EASE = 'back.out(1.65)'
+/** 轴心展开时的旋转角度（度） */
 const HUB_ROTATION = 108
 
+/** 导航扇形是否已展开 */
 const isExpanded = ref(false)
+/** 展开/收起动画是否进行中 */
 const isAnimating = ref(false)
+/** 导航容器根元素引用 */
 const containerRef = ref<HTMLElement | null>(null)
+/** 轴心圆球元素引用 */
 const hubRef = ref<HTMLElement | null>(null)
+/** 各子节点 DOM 元素引用数组 */
 const nodeEls = ref<(HTMLElement | null)[]>([])
 
+/** GSAP 上下文，用于卸载时 revert */
 let gsapCtx: gsap.Context | null = null
+/** 当前活动的 GSAP 时间线 */
 let activeTimeline: gsap.core.Timeline | null = null
 
+/** 收集 v-for 子节点 DOM 引用到 nodeEls */
 function setNodeEl(el: unknown, index: number): void {
   if (el instanceof HTMLElement) {
     nodeEls.value[index] = el
   }
 }
 
+/** 极坐标角度与半径转换为笛卡尔偏移量 */
 function polarToXY(deg: number, radius: number): { x: number; y: number } {
+  /** 角度转弧度 */
   const rad = (deg * Math.PI) / 180
   return {
     x: Math.cos(rad) * radius,
@@ -56,6 +72,7 @@ function playLockSnap(el: HTMLElement): void {
     .to(el, { scale: 1, duration: 0.14, ease: 'elastic.out(1, 0.55)' })
 }
 
+/** 将轴心与所有子节点重置为收起初始状态 */
 function initCollapsed(): void {
   if (!hubRef.value) return
   gsap.set(hubRef.value, { rotation: 0, transformOrigin: '50% 50%' })
@@ -72,6 +89,7 @@ function initCollapsed(): void {
   })
 }
 
+/** 顺时针扇形展开子节点并旋转轴心 */
 function expand(): void {
   if (isAnimating.value || isExpanded.value) return
   isAnimating.value = true
@@ -92,6 +110,7 @@ function expand(): void {
 
   nodeEls.value.forEach((el, i) => {
     if (!el) return
+    /** 当前子节点的扇形展开坐标偏移 */
     const { x, y } = polarToXY(FAN_ANGLES[i], FAN_RADIUS)
 
     activeTimeline!.to(
@@ -111,6 +130,7 @@ function expand(): void {
   })
 }
 
+/** 逆序收起子节点并复位轴心旋转 */
 function collapse(): void {
   if (isAnimating.value || !isExpanded.value) return
   isAnimating.value = true
@@ -124,6 +144,7 @@ function collapse(): void {
     },
   })
 
+  /** 逆序排列子节点，用于收起动画 */
   const reversed = [...nodeEls.value].reverse()
   reversed.forEach((el, i) => {
     if (!el) return
@@ -153,6 +174,7 @@ function collapse(): void {
   )
 }
 
+/** 切换轴心展开/收起状态 */
 function toggleHub(): void {
   if (isExpanded.value) {
     collapse()
@@ -161,20 +183,24 @@ function toggleHub(): void {
   }
 }
 
+/** 点击子节点：派发导航并自动收起 */
 function onNodeClick(node: MechanicalNavNode): void {
   if (isAnimating.value) return
   emit('navigate', node.to)
   collapse()
 }
 
+/** 点击导航外部区域时自动收起 */
 function onDocumentPointerDown(e: PointerEvent): void {
   if (!isExpanded.value || !containerRef.value) return
+  /** 指针事件目标节点 */
   const target = e.target as Node
   if (!containerRef.value.contains(target)) {
     collapse()
   }
 }
 
+/** 挂载后初始化 GSAP 上下文与文档级点击监听 */
 onMounted(() => {
   gsapCtx = gsap.context(() => {
     initCollapsed()
@@ -183,12 +209,14 @@ onMounted(() => {
   document.addEventListener('pointerdown', onDocumentPointerDown)
 })
 
+/** 卸载时清理 GSAP 时间线、上下文与事件监听 */
 onUnmounted(() => {
   activeTimeline?.kill()
   gsapCtx?.revert()
   document.removeEventListener('pointerdown', onDocumentPointerDown)
 })
 
+/** 向父组件暴露展开状态与控制方法 */
 defineExpose({ isExpanded, expand, collapse, toggle: toggleHub })
 </script>
 

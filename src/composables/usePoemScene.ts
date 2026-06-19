@@ -10,93 +10,159 @@ import type { PoemLayout } from '@/types/poem'
 import { collectDistractorChars, buildBackgroundCharPool } from '@/utils/poemLayout'
 import { fontHasChar } from '@/utils/chineseFontLoader'
 
+/** 诗词场景阶段 */
 export type PoemScenePhase = 'loading' | 'playing' | 'dissolving' | 'complete'
 
+/** usePoemScene 可选配置 */
 export interface UsePoemSceneOptions {
+  /** 流光解体完成回调 */
   onComplete?: () => void
+  /** 流光解体动画时长 (ms) */
   dissolveDuration?: number
 }
 
+/** 悬浮诗文字槽 — 含占位与目标位置 */
 interface FloatingSlot {
+  /** 对应布局全局序号 */
   slotIndex: number
+  /** 已填入的文字 Mesh（挖空位未填时为 null） */
   mesh: THREE.Mesh | null
+  /** 挖空占位框 Mesh */
   placeholder: THREE.Mesh | null
+  /** 目标世界坐标 */
   targetPos: THREE.Vector3
+  /** 正确字符 */
   char: string
 }
 
+/** 地面散落字块数据 */
 interface GroundTile {
+  /** 字符内容 */
   char: string
+  /** 对应 Three.js Mesh */
   mesh: THREE.Mesh
+  /** 是否为正确答案 */
   isCorrect: boolean
+  /** 对应挖空位全局序号 */
   blankGlobalIndex: number | null
+  /** 是否已被拾取 */
   picked: boolean
+  /** 相对标准字号的缩放比 */
   sizeRatio: number
 }
 
+/** 解体流光粒子 */
 interface Particle {
+  /** 当前 X */
   x: number
+  /** 当前 Y */
   y: number
+  /** 当前 Z */
   z: number
+  /** X 方向速度 */
   vx: number
+  /** Y 方向速度 */
   vy: number
+  /** Z 方向速度 */
   vz: number
 }
 
+/** 竖排列间距 */
 const COL_SP = 1.75
+/** 竖排行间距 */
 const ROW_SP = 1.55
+/** 主诗文字号 */
 const CHAR_SIZE = 0.52
+/** 主诗文字深度 */
 const CHAR_DEPTH = 0.08
+/** 背景字字号 */
 const BG_CHAR_SIZE = 0.38
+/** 地面 Y 坐标 */
 const GROUND_Y = -3.2
+/** 地面字散射半径 */
 const SCATTER_R = 11
+/** 地面字最小尺寸 */
 const GROUND_CHAR_MIN = 0.32
+/** 地面字最大尺寸 */
 const GROUND_CHAR_MAX = 0.84
+/** 地面额外干扰字数量 */
 const GROUND_EXTRA_COUNT = 56
+/** 背景字 Z 深度 */
 const BG_Z = -14
+/** 背景字网格单元尺寸 */
 const BG_CELL = 1.92
+/** 默认流光解体时长 (ms) */
+const DEFAULT_DISSOLVE_MS = 2000
 
+/** 背景闪烁字数据 */
 interface BackgroundChar {
+  /** 文字 Mesh */
   mesh: THREE.Mesh
+  /** 闪烁相位偏移 */
   phase: number
+  /** 闪烁速度倍率 */
   speed: number
 }
 
+/** 诗词 Three.js 场景 Composable */
 export function usePoemScene(
   canvasRef: Ref<HTMLCanvasElement | null>,
   layoutRef: Ref<PoemLayout | null>,
   fontRef: Ref<Font | null>,
   options: UsePoemSceneOptions = {},
 ) {
-  const { onComplete, dissolveDuration = 2000 } = options
+  const { onComplete, dissolveDuration = DEFAULT_DISSOLVE_MS } = options
 
+  /** 当前场景阶段 */
   const phase = ref<PoemScenePhase>('loading')
+  /** 已填入的挖空位数量 */
   const filledCount = ref(0)
+  /** 挖空位总数 */
   const totalBlanks = ref(0)
 
+  /** WebGL 渲染器 */
   let renderer: THREE.WebGLRenderer | null = null
+  /** Three.js 场景根节点 */
   let scene: THREE.Scene | null = null
+  /** 透视相机 */
   let camera: THREE.PerspectiveCamera | null = null
+  /** 后处理合成器（Bloom） */
   let composer: EffectComposer | null = null
+  /** 射线拾取器 */
   let raycaster = new THREE.Raycaster()
+  /** 归一化指针坐标 */
   let pointer = new THREE.Vector2()
+  /** requestAnimationFrame 句柄 */
   let rafId = 0
+  /** 场景时钟 */
   let clock = new THREE.Clock()
 
+  /** 悬浮诗文组 */
   const poemGroup = new THREE.Group()
+  /** 背景字阵组 */
   const backgroundGroup = new THREE.Group()
+  /** 地面散落字组 */
   const groundGroup = new THREE.Group()
+  /** 悬浮字槽列表 */
   const floatingSlots: FloatingSlot[] = []
+  /** 地面字块列表 */
   const groundTiles: GroundTile[] = []
+  /** 背景闪烁字列表 */
   const backgroundChars: BackgroundChar[] = []
+  /** 解体流光粒子数组 */
   let particles: Particle[] | null = null
+  /** 流光 Points Mesh */
   let pointsMesh: THREE.Points | null = null
+  /** 解体动画起始时间戳 */
   let dissolveStart = 0
+  /** 画布宽度 */
   let width = 0
+  /** 画布高度 */
   let height = 0
 
   // ── 材质工厂 ──
 
+  /** 创建发光诗文字材质 */
   function createGlowMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color: 0xfff0c8,
@@ -107,6 +173,7 @@ export function usePoemScene(
     })
   }
 
+  /** 创建背景字材质 */
   function createBackgroundMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color: 0x9a8e78,
@@ -117,6 +184,7 @@ export function usePoemScene(
     })
   }
 
+  /** 创建地面字材质 */
   function createGroundMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color: 0xc8b890,
@@ -127,6 +195,7 @@ export function usePoemScene(
     })
   }
 
+  /** 创建挖空占位框材质 */
   function createPlaceholderMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color: 0x2a2210,
@@ -139,6 +208,7 @@ export function usePoemScene(
     })
   }
 
+  /** 创建挖空占位方块 */
   function makeBlankPlaceholder(pos: THREE.Vector3): THREE.Mesh {
     const geo = new THREE.BoxGeometry(CHAR_SIZE * 0.85, CHAR_SIZE * 1.05, CHAR_DEPTH * 0.6)
     const mat = createPlaceholderMaterial()
@@ -148,6 +218,7 @@ export function usePoemScene(
     return mesh
   }
 
+  /** 创建三维文字 Mesh */
   function makeTextMesh(
     font: Font,
     char: string,
@@ -175,6 +246,7 @@ export function usePoemScene(
 
   // ── 布局坐标 ──
 
+  /** 计算槽位世界坐标（竖排布局） */
   function slotWorldPosition(col: number, row: number, maxRows: number): THREE.Vector3 {
     const lineCount = layoutRef.value?.lines.length ?? 1
     const maxCol = lineCount - 1
@@ -189,6 +261,7 @@ export function usePoemScene(
 
   // ── 场景构建 ──
 
+  /** 构建悬浮主诗文字 */
   function buildFloatingPoem(font: Font, layout: PoemLayout): void {
     poemGroup.clear()
     floatingSlots.length = 0
@@ -223,6 +296,7 @@ export function usePoemScene(
     filledCount.value = 0
   }
 
+  /** 构建远景背景字阵 */
   function buildBackgroundBoard(font: Font, layout: PoemLayout): void {
     for (const bg of backgroundChars) {
       bg.mesh.geometry.dispose()
@@ -271,6 +345,7 @@ export function usePoemScene(
     }
   }
 
+  /** 更新背景字闪烁发光 */
   function updateBackgroundSparkle(time: number): void {
     for (const bg of backgroundChars) {
       const mat = bg.mesh.material as THREE.MeshStandardMaterial
@@ -286,6 +361,7 @@ export function usePoemScene(
     }
   }
 
+  /** 随机地面字尺寸（正确字偏大） */
   function randomGroundCharSize(isCorrect: boolean): number {
     if (isCorrect) {
       return CHAR_SIZE * (0.78 + Math.random() * 0.38)
@@ -295,6 +371,7 @@ export function usePoemScene(
     return GROUND_CHAR_MIN + skew * (GROUND_CHAR_MAX - GROUND_CHAR_MIN)
   }
 
+  /** 构建地面散落字块 */
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
@@ -348,6 +425,7 @@ export function usePoemScene(
 
   // ── 初始化 / 销毁 ──
 
+  /** 初始化 WebGL 渲染器与场景 */
   function initRenderer(): void {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -404,6 +482,7 @@ export function usePoemScene(
     poemGroup.rotation.set(0, 0, 0)
   }
 
+  /** 重建完整场景内容 */
   function rebuildScene(): void {
     const font = fontRef.value
     const layout = layoutRef.value
@@ -414,6 +493,7 @@ export function usePoemScene(
     phase.value = 'playing'
   }
 
+  /** 释放所有 GPU 资源与监听 */
   function dispose(): void {
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', onResize)
@@ -444,6 +524,7 @@ export function usePoemScene(
 
   // ── 交互 ──
 
+  /** 指针按下 — 射线检测地面字 */
   function onPointerDown(e: PointerEvent): void {
     if (phase.value !== 'playing' || !camera || !scene) return
 
@@ -465,6 +546,7 @@ export function usePoemScene(
     handleGroundPick(tile)
   }
 
+  /** 处理地面字点击 */
   function handleGroundPick(tile: GroundTile): void {
     if (!tile.isCorrect || tile.blankGlobalIndex === null) {
       gsap.to(tile.mesh.scale, {
@@ -487,6 +569,7 @@ export function usePoemScene(
     flyCharToSlot(tile, slot)
   }
 
+  /** 字块飞向诗文字槽的贝塞尔动画 */
   function flyCharToSlot(tile: GroundTile, slot: FloatingSlot): void {
     const font = fontRef.value
     if (!font) return
@@ -578,6 +661,7 @@ export function usePoemScene(
 
   // ── 流光解体 ──
 
+  /** 开始流光解体动画 */
   function startDissolve(): void {
     if (phase.value !== 'playing') return
     phase.value = 'dissolving'
@@ -645,6 +729,7 @@ export function usePoemScene(
     particles = velocities
   }
 
+  /** 更新解体粒子运动与淡出 */
   function updateDissolve(dt: number): void {
     if (!particles || !pointsMesh) return
 
@@ -677,6 +762,7 @@ export function usePoemScene(
 
   // ── 渲染循环 ──
 
+  /** 画布尺寸变化时重建 */
   function onResize(): void {
     const canvas = canvasRef.value
     if (!canvas || !camera || !renderer || !composer) return
@@ -693,6 +779,7 @@ export function usePoemScene(
     }
   }
 
+  /** 渲染循环 */
   function animate(): void {
     rafId = requestAnimationFrame(animate)
     if (!renderer || !scene || !camera || !composer) return
@@ -713,6 +800,7 @@ export function usePoemScene(
     composer.render()
   }
 
+  /** 初始化场景并启动循环 */
   function init(): void {
     if (!canvasRef.value || !fontRef.value || !layoutRef.value) return
     if (renderer) return

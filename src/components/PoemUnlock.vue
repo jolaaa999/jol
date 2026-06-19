@@ -11,28 +11,39 @@ import {
 } from '@/utils/poemLayout'
 import type { PoemLayout } from '@/types/poem'
 
+/** 解锁完成时向父组件派发 complete 事件 */
 const emit = defineEmits<{
   complete: []
 }>()
 
+/** Three.js 诗文场景画布引用 */
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+/** 诗文布局数据（含空缺位） */
 const layoutRef = shallowRef<PoemLayout | null>(null)
+/** 已加载的中文字体实例 */
 const fontRef = shallowRef<Font | null>(null)
+/** 场景初始化是否失败 */
 const loadError = ref(false)
+/** 字体与布局是否仍在加载 */
 const loading = ref(true)
 
+/** 诗文交互场景的阶段、填空进度及生命周期方法 */
 const { phase, filledCount, totalBlanks, init, dispose, rebuildScene } =
   usePoemScene(canvasRef, layoutRef, fontRef, {
     dissolveDuration: 2000,
+    /** 全部空缺填完后通知父组件 */
     onComplete: () => emit('complete'),
   })
 
+/** 加载字体与布局并初始化 Three.js 诗文解锁场景 */
 async function bootstrap(): Promise<void> {
   loading.value = true
   loadError.value = false
 
   try {
+    /** 构建带空缺位的诗文布局 */
     const layout = buildPoemLayoutWithBlanks(UNLOCK_POEM, UNLOCK_BLANK_CHARS)
+    /** 加载布局所需的全部中文字形 */
     const font = await loadChineseFont(collectAllFontChars(layout))
     fontRef.value = font
     layoutRef.value = layout
@@ -49,6 +60,7 @@ async function bootstrap(): Promise<void> {
 
 bootstrap()
 
+/** 组件卸载时释放 Three.js 场景资源 */
 onUnmounted(dispose)
 </script>
 

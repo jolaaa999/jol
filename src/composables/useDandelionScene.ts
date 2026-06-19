@@ -4,15 +4,23 @@ import { useWindField } from './useWindField'
 
 /** Canvas 蒲公英粒子场景 — Verlet 积分 + 风场反馈 */
 export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
+  /** 物理引擎实例 */
   const engine = shallowRef<PhysicsEngine | null>(null)
+  /** 风场采样器 */
   const windField = useWindField()
+  /** 指针位置（用于风场扰动） */
   const pointer = ref<{ x: number; y: number } | null>(null)
+  /** requestAnimationFrame 句柄 */
   let rafId = 0
+  /** 上一帧时间戳 */
   let lastTime = 0
 
+  /** 种子粒子数量 */
   const SEED_COUNT = 148
+  /** 花头粒子索引 */
   const HEAD_ID = 0
 
+  /** 初始化蒲公英物理场景（花头 + 种子弹簧） */
   function initScene(width: number, height: number): void {
     const eng = new PhysicsEngine({
       gravity: { x: 0, y: 0.04 },
@@ -20,7 +28,9 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       substeps: 4,
     })
 
+    /** 花头水平中心 */
     const cx = width * 0.72
+    /** 花头垂直中心 */
     const cy = height * 0.42
 
     eng.addParticle({
@@ -62,6 +72,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     engine.value = eng
   }
 
+  /** 渲染一帧 — 物理步进、绘制弹簧与种子 */
   function render(
     ctx: CanvasRenderingContext2D,
     width: number,
@@ -125,6 +136,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     ctx.stroke()
   }
 
+  /** requestAnimationFrame 主循环 */
   function loop(timestamp: number): void {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -150,6 +162,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     rafId = requestAnimationFrame(loop)
   }
 
+  /** 指针移动 — 更新风场扰动源 */
   function onPointerMove(e: PointerEvent): void {
     const canvas = canvasRef.value
     if (!canvas) return
@@ -160,6 +173,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     }
   }
 
+  /** 指针离开 — 清除扰动源 */
   function onPointerLeave(): void {
     pointer.value = null
   }

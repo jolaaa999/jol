@@ -1,9 +1,13 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import gsap from 'gsap'
 
+/** 导航栏分段配置 */
 export interface NavSegment {
+  /** 分段唯一标识 */
   id: string
+  /** 显示文案 */
   label: string
+  /** 跳转链接 */
   href: string
 }
 
@@ -12,7 +16,9 @@ export function useGsapNav(
   containerRef: Ref<HTMLElement | null>,
   segments: NavSegment[],
 ) {
+  /** 当前激活的分段索引 */
   const activeIndex = ref(0)
+  /** GSAP 上下文，卸载时 revert */
   let ctx: gsap.Context | null = null
 
   onMounted(() => {
@@ -59,6 +65,7 @@ export function useGsapNav(
     }, containerRef.value)
   })
 
+  /** 将指示器滑动到指定分段 */
   function animateIndicator(indicatorEl: HTMLElement, index: number): void {
     activeIndex.value = index
     const segment = containerRef.value?.querySelectorAll('[data-nav-segment]')[index] as HTMLElement
@@ -72,6 +79,7 @@ export function useGsapNav(
     })
   }
 
+  /** 分段悬停微动效 */
   function hoverSegment(el: HTMLElement, entering: boolean): void {
     gsap.to(el, {
       y: entering ? -2 : 0,

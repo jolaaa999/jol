@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import GlassCard from '@/components/ui/GlassCard.vue'
 
+/** 博客条目数据结构 */
 export interface BlogEntry {
   id: string
   title: string
@@ -9,6 +10,7 @@ export interface BlogEntry {
   date: string
 }
 
+/** 诗文条目列表（含本地占位数据） */
 const poetryEntries = ref<BlogEntry[]>([
   {
     id: 'p-001',
@@ -30,6 +32,7 @@ const poetryEntries = ref<BlogEntry[]>([
   },
 ])
 
+/** 有感/随笔条目列表（含本地占位数据） */
 const reflectionEntries = ref<BlogEntry[]>([
   {
     id: 'r-001',
@@ -51,15 +54,21 @@ const reflectionEntries = ref<BlogEntry[]>([
   },
 ])
 
+/** 文章流同步状态：加载中 / 已就绪 / 离线 */
 const streamStatus = ref<'loading' | 'ready' | 'offline'>('loading')
 
+/** 精选展示条目（优先有感，否则诗文） */
 const featuredEntry = computed(() => reflectionEntries.value[0] ?? poetryEntries.value[0])
+/** 全部条目数量 */
 const totalEntries = computed(() => poetryEntries.value.length + reflectionEntries.value.length)
+/** 最新发布日期 */
 const latestDate = computed(() => {
+  /** 全部条目日期，降序排列后取最新 */
   const dates = [...poetryEntries.value, ...reflectionEntries.value].map((entry) => entry.date).sort().reverse()
   return dates[0] ?? '--'
 })
 
+/** 文章 API 响应体结构 */
 interface ArticleResponse {
   data: Array<{
     id: string
@@ -72,6 +81,7 @@ interface ArticleResponse {
   category: string
 }
 
+/** 将 API 文章数据转换为博客条目格式 */
 function toEntry(article: ArticleResponse['data'][number]): BlogEntry {
   return {
     id: article.id,
@@ -81,14 +91,17 @@ function toEntry(article: ArticleResponse['data'][number]): BlogEntry {
   }
 }
 
+/** 挂载后并行拉取诗文与文章 API，失败则保持离线占位数据 */
 onMounted(async () => {
   try {
+    /** 并行请求诗文与文章接口 */
     const [poetryRes, postsRes] = await Promise.all([
       fetch('/api/poetry'),
       fetch('/api/posts'),
     ])
     if (!poetryRes.ok || !postsRes.ok) throw new Error('offline')
 
+    /** 解析诗文与文章 JSON 响应 */
     const poetryData = (await poetryRes.json()) as ArticleResponse
     const postsData = (await postsRes.json()) as ArticleResponse
 

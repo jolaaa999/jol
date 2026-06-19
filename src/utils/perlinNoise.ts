@@ -2,8 +2,10 @@ import type { Vec2 } from '@/composables/usePhysicsEngine'
 
 /** 2D Perlin 噪音 — 返回值约 [-1, 1] */
 export class PerlinNoise2D {
+  /** 排列表（256 字节双倍展开） */
   private readonly perm: number[]
 
+  /** 用种子初始化排列表 */
   constructor(seed = 42) {
     const p = Array.from({ length: 256 }, (_, i) => i)
     let s = seed
@@ -15,14 +17,17 @@ export class PerlinNoise2D {
     this.perm = [...p, ...p]
   }
 
+  /** 平滑插值曲线（Perlin fade） */
   private fade(t: number): number {
     return t * t * t * (t * (t * 6 - 15) + 10)
   }
 
+  /** 线性插值 */
   private lerp(a: number, b: number, t: number): number {
     return a + t * (b - a)
   }
 
+  /** 根据哈希计算梯度贡献 */
   private grad(hash: number, x: number, y: number): number {
     const h = hash & 3
     const u = h < 2 ? x : y
@@ -30,6 +35,7 @@ export class PerlinNoise2D {
     return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v)
   }
 
+  /** 二维 Perlin 噪音采样 */
   noise(x: number, y: number): number {
     const xi = Math.floor(x) & 255
     const yi = Math.floor(y) & 255
@@ -86,4 +92,5 @@ export class PerlinNoise2D {
   }
 }
 
+/** 全局共享 Perlin 实例（种子 2026） */
 export const sharedPerlin = new PerlinNoise2D(2026)

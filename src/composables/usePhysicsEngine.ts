@@ -1,34 +1,58 @@
+/** 二维向量 */
 export interface Vec2 {
+  /** X 分量 */
   x: number
+  /** Y 分量 */
   y: number
 }
 
+/** 物理粒子 — Verlet 积分用 */
 export interface Particle {
+  /** 粒子唯一索引 */
   id: number
+  /** 当前 X 坐标 */
   x: number
+  /** 当前 Y 坐标 */
   y: number
+  /** 上一帧 X 坐标（Verlet 用） */
   prevX: number
+  /** 上一帧 Y 坐标（Verlet 用） */
   prevY: number
+  /** 质量 */
   mass: number
+  /** 是否固定不动 */
   pinned: boolean
+  /** 碰撞半径 */
   radius: number
+  /** 空气阻力系数 */
   drag: number
 }
 
+/** 弹簧约束 — 连接两粒子 */
 export interface Spring {
+  /** 粒子 A 索引 */
   a: number
+  /** 粒子 B 索引 */
   b: number
+  /** 自然长度 */
   restLength: number
+  /** 刚度系数 */
   stiffness: number
+  /** 阻尼系数 */
   damping: number
 }
 
+/** 物理引擎全局配置 */
 export interface PhysicsConfig {
+  /** 重力加速度向量 */
   gravity: Vec2
+  /** 全局速度衰减（每帧乘数） */
   globalDamping: number
+  /** 每步积分子步数 */
   substeps: number
 }
 
+/** 默认物理参数 */
 const DEFAULT_CONFIG: PhysicsConfig = {
   gravity: { x: 0, y: 0.12 },
   globalDamping: 0.998,
@@ -40,24 +64,30 @@ const DEFAULT_CONFIG: PhysicsConfig = {
  * 单一职责：数值模拟，不含渲染逻辑
  */
 export class PhysicsEngine {
+  /** 粒子数组 */
   particles: Particle[] = []
+  /** 弹簧约束数组 */
   springs: Spring[] = []
   private config: PhysicsConfig
 
+  /** 合并配置并初始化引擎 */
   constructor(config: Partial<PhysicsConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
   }
 
+  /** 添加粒子并返回其索引 */
   addParticle(p: Omit<Particle, 'id'>): number {
     const id = this.particles.length
     this.particles.push({ ...p, id })
     return id
   }
 
+  /** 添加弹簧约束 */
   addSpring(s: Omit<Spring, 'a' | 'b'> & { a: number; b: number }): void {
     this.springs.push(s)
   }
 
+  /** 对指定粒子施加瞬时力（直接修正位置） */
   applyForce(id: number, force: Vec2): void {
     const p = this.particles[id]
     if (!p || p.pinned) return
@@ -78,6 +108,7 @@ export class PhysicsEngine {
     }
   }
 
+  /** 执行一步物理模拟（含子步与外力） */
   step(dt: number, externalForces?: (p: Particle, index: number) => Vec2): void {
     const subDt = dt / this.config.substeps
     for (let s = 0; s < this.config.substeps; s++) {
@@ -146,6 +177,7 @@ export class PhysicsEngine {
     }
   }
 
+  /** 将粒子约束在画布边界内 */
   constrainToBounds(
     width: number,
     height: number,
@@ -174,7 +206,9 @@ export class PhysicsEngine {
   }
 }
 
+/** 创建 Verlet 物理引擎实例 */
 export function usePhysicsEngine(config?: Partial<PhysicsConfig>) {
+  /** 物理引擎单例引用 */
   const engine = new PhysicsEngine(config)
   return { engine }
 }

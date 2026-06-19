@@ -4,22 +4,30 @@ import { useRouter } from 'vue-router'
 import { useDandelionThreeScene } from '@/composables/useDandelionThreeScene'
 import PoemUnlock from '@/components/PoemUnlock.vue'
 
+/** 蒲公英 Three.js 画布引用 */
 const dandelionCanvasRef = ref<HTMLCanvasElement | null>(null)
+/** Vue Router 实例 */
 const router = useRouter()
+/** 是否显示诗文解锁界面 */
 const showUnlock = ref(false)
 
+/** 蒲公英场景阶段、淡出透明度及指针交互回调 */
 const { phase, fadeOpacity, onPointerMove, onPointerLeave } = useDandelionThreeScene(dandelionCanvasRef, {
   spreadDuration: 2800,
+  /** 蒲公英飘散动画结束后显示诗文解锁界面 */
   onTransitionComplete: () => {
     showUnlock.value = true
   },
 })
 
+/** 诗文解锁完成后跳转至博客页 */
 function onUnlockComplete(): void {
   router.push('/blog')
 }
 
+/** 空闲阶段且未解锁时显示操作提示 */
 const showHint = computed(() => phase.value === 'idle' && !showUnlock.value)
+/** 蒲公英飘散过渡层的叠加不透明度 */
 const overlayOpacity = computed(() =>
   phase.value === 'spreading' && !showUnlock.value ? 1 - fadeOpacity.value : 0,
 )

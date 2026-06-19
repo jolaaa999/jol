@@ -1,13 +1,19 @@
 import * as opentype from 'opentype.js'
 import { Font, FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
 
+/** Typeface JSON 字形数据 */
 interface TypefaceGlyph {
+  /** 水平前进量 */
   ha: number
+  /** 包围盒左边界 */
   x_min: number
+  /** 包围盒右边界 */
   x_max: number
+  /** SVG 路径命令串 */
   o: string
 }
 
+/** Three.js FontLoader 兼容的 typeface 结构 */
 export interface TypefaceJson {
   glyphs: Record<string, TypefaceGlyph>
   familyName: string
@@ -20,6 +26,7 @@ export interface TypefaceJson {
   original_font_information: Record<string, string>
 }
 
+/** 预生成 typeface JSON 候选路径 */
 const FONT_JSON_CANDIDATES = ['/fonts/poem.typeface.json']
 
 /** 本地 WOFF 回退（需先运行 npm run generate:poem-font 生成 JSON，或自行放置字体） */
@@ -27,22 +34,28 @@ const WOFF_CANDIDATES = [
   '/fonts/noto-sans-sc-chinese-simplified-400-normal.woff',
 ]
 
+/** 缓存的已加载字体实例 */
 let cachedFont: Font | null = null
+/** 缓存中已包含的字形集合 */
 let cachedGlyphSet = new Set<string>()
 
+/** 检查字体是否包含指定字符 */
 export function fontHasChar(font: Font, char: string): boolean {
   const glyphs = (font as unknown as { data?: { glyphs?: Record<string, unknown> } }).data?.glyphs
   return Boolean(glyphs && char in glyphs)
 }
 
+/** 检查字体是否包含字符串中全部字符 */
 function fontHasAllChars(font: Font, chars: string): boolean {
   return [...chars].every((c) => !c.trim() || fontHasChar(font, c))
 }
 
+/** 将 Y 轴翻转为 typeface 坐标系 */
 function flipY(y: number, ascender: number): number {
   return ascender - y
 }
 
+/** 将 opentype 路径转为 typeface SVG 命令串 */
 function pathToTypefaceO(path: opentype.Path, ascender: number): string {
   const parts: string[] = []
   for (const cmd of path.commands) {
@@ -71,6 +84,7 @@ function pathToTypefaceO(path: opentype.Path, ascender: number): string {
   return parts.join(' ')
 }
 
+/** 从 opentype 字体提取单字字形 */
 function glyphFromOpentype(otFont: opentype.Font, char: string): TypefaceGlyph | null {
   const glyph = otFont.charToGlyph(char)
   if (!glyph || glyph.index === 0) return null
@@ -90,6 +104,7 @@ function glyphFromOpentype(otFont: opentype.Font, char: string): TypefaceGlyph |
   }
 }
 
+/** 从 opentype 字体构建字符子集 typeface */
 function buildTypefaceFromOpentype(otFont: opentype.Font, chars: string): TypefaceJson {
   const unique = [...new Set(chars.split(''))].filter(Boolean)
   const ascender = otFont.ascender
@@ -120,6 +135,7 @@ function buildTypefaceFromOpentype(otFont: opentype.Font, chars: string): Typefa
   }
 }
 
+/** 从 URL 加载 typeface JSON */
 async function loadTypefaceJson(url: string): Promise<TypefaceJson | null> {
   try {
     const res = await fetch(url)
@@ -130,6 +146,7 @@ async function loadTypefaceJson(url: string): Promise<TypefaceJson | null> {
   }
 }
 
+/** 依次尝试 URL 列表加载 opentype 字体 */
 async function loadOpentypeFromUrls(urls: readonly string[]): Promise<opentype.Font | null> {
   for (const url of urls) {
     try {
@@ -144,6 +161,7 @@ async function loadOpentypeFromUrls(urls: readonly string[]): Promise<opentype.F
   return null
 }
 
+/** 合并两个字形集（补全缺失字） */
 function mergeGlyphs(base: TypefaceJson, patch: TypefaceJson): TypefaceJson {
   return {
     ...base,
@@ -155,6 +173,7 @@ function mergeGlyphs(base: TypefaceJson, patch: TypefaceJson): TypefaceJson {
  * 加载支持中文的 Font — 优先本地 JSON，缺失字从本地 WOFF 子集补全
  */
 export async function loadChineseFont(requiredChars: string): Promise<Font> {
+  /** 去重后的所需字符集 */
   const chars = [...new Set((requiredChars + '□').split(''))].filter(Boolean).join('')
 
   if (cachedFont && [...chars].every((c) => cachedGlyphSet.has(c))) {

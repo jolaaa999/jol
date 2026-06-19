@@ -1,18 +1,23 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
+/** 健康检查 API 响应体结构 */
 interface HealthResponse {
   status: string
   service: string
   version: string
 }
 
+/** 后端健康检查返回的状态文本 */
 const apiStatus = ref<string>('—')
 
+/** 挂载后请求 /api/health 并更新 API 状态 */
 onMounted(async () => {
   try {
+    /** 请求后端健康检查接口 */
     const res = await fetch('/api/health')
     if (!res.ok) throw new Error('offline')
+    /** 解析健康检查 JSON 响应 */
     const data = (await res.json()) as HealthResponse
     apiStatus.value = data.status
   } catch {
