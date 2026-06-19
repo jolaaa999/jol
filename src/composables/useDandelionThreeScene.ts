@@ -64,6 +64,12 @@ const MOUSE_WIND_FLUFF = 0.18
 const AMBIENT_WIND_IDLE = 0.018
 /** 有鼠标时环境风强度倍率 */
 const AMBIENT_WIND_HOVER = 0.03
+/** Bloom 强度（仅高光粒子，背景不参与） */
+const BLOOM_STRENGTH = 0.22
+/** Bloom 扩散半径 */
+const BLOOM_RADIUS = 0.28
+/** Bloom 亮度阈值（高于此值才发光，避免麦黄背景过曝） */
+const BLOOM_THRESHOLD = 0.9
 
 /** 与 Landing.vue CSS 一致的麦黄田园渐变，供 WebGL 不透明渲染（Bloom 会盖住下层 CSS） */
 function createPastoralGradientTexture(width: number, height: number): THREE.CanvasTexture {
@@ -85,14 +91,14 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
     cx - Math.cos(angle) * diag * 0.5,
     cy - Math.sin(angle) * diag * 0.5,
   )
-  linear.addColorStop(0, '#fff8e6')
-  linear.addColorStop(0.38, '#f5e6b8')
-  linear.addColorStop(0.68, '#e8d49a')
-  linear.addColorStop(1, '#dcc888')
+  linear.addColorStop(0, '#ede0c4')
+  linear.addColorStop(0.38, '#e0d0a8')
+  linear.addColorStop(0.68, '#d4c490')
+  linear.addColorStop(1, '#c8b878')
   ctx.fillStyle = linear
   ctx.fillRect(0, 0, w, h)
 
-  /** 叠加径向光斑层 */
+  /** 叠加径向光斑层（低透明度，避免 Bloom 洗白） */
   const addRadial = (px: number, py: number, inner: string, radiusFrac: number): void => {
     const r = Math.max(w, h) * radiusFrac
     const g = ctx.createRadialGradient(px * w, py * h, 0, px * w, py * h, r)
@@ -101,9 +107,9 @@ function createPastoralGradientTexture(width: number, height: number): THREE.Can
     ctx.fillStyle = g
     ctx.fillRect(0, 0, w, h)
   }
-  addRadial(0.15, 0.12, 'rgba(255, 248, 210, 0.95)', 0.38)
-  addRadial(0.88, 0.18, 'rgba(255, 235, 170, 0.85)', 0.34)
-  addRadial(0.5, 1.0, 'rgba(210, 175, 95, 0.55)', 0.42)
+  addRadial(0.15, 0.12, 'rgba(240, 225, 180, 0.35)', 0.32)
+  addRadial(0.88, 0.18, 'rgba(235, 215, 165, 0.28)', 0.28)
+  addRadial(0.5, 1.0, 'rgba(200, 170, 110, 0.22)', 0.36)
 
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
@@ -120,10 +126,10 @@ function createGlowTexture(): THREE.CanvasTexture {
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  g.addColorStop(0, 'rgba(255, 255, 255, 1)')
-  g.addColorStop(0.25, 'rgba(255, 245, 220, 0.85)')
-  g.addColorStop(0.55, 'rgba(255, 210, 140, 0.35)')
-  g.addColorStop(1, 'rgba(255, 180, 80, 0)')
+  g.addColorStop(0, 'rgba(255, 235, 200, 0.9)')
+  g.addColorStop(0.25, 'rgba(255, 220, 170, 0.55)')
+  g.addColorStop(0.55, 'rgba(240, 190, 120, 0.2)')
+  g.addColorStop(1, 'rgba(220, 160, 80, 0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
   const tex = new THREE.CanvasTexture(canvas)
@@ -329,9 +335,9 @@ export function useDandelionThreeScene(
       positions[i * 3 + 1] = w.y
       positions[i * 3 + 2] = fp.z
       const g = fp.goldMix
-      colors[i * 3] = 0.92 + g * 0.08
-      colors[i * 3 + 1] = 0.88 + g * 0.1
-      colors[i * 3 + 2] = 0.72 + g * 0.2
+      colors[i * 3] = 0.82 + g * 0.1
+      colors[i * 3 + 1] = 0.72 + g * 0.12
+      colors[i * 3 + 2] = 0.48 + g * 0.18
     }
 
     const geo = new THREE.BufferGeometry()
@@ -345,7 +351,7 @@ export function useDandelionThreeScene(
       size: PARTICLE_SIZE,
       map: glowTexture,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.62,
       vertexColors: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
@@ -391,12 +397,12 @@ export function useDandelionThreeScene(
 
     const head = engine.particles[headEngineId]
     const hw = pxToWorld(head.x, head.y, canvasW, canvasH)
-    const glowGeo = new THREE.CircleGeometry(headSpread * 0.28, 36)
+    const glowGeo = new THREE.CircleGeometry(headSpread * 0.16, 36)
     const glowMat = new THREE.MeshBasicMaterial({
-      color: 0xfff4d0,
+      color: 0xe8c878,
       transparent: true,
-      opacity: 0.2,
-      blending: THREE.AdditiveBlending,
+      opacity: 0.07,
+      blending: THREE.NormalBlending,
       depthWrite: false,
     })
     headGlow = new THREE.Mesh(glowGeo, glowMat)
@@ -430,7 +436,7 @@ export function useDandelionThreeScene(
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_DPR))
     renderer.setSize(w, h, false)
-    renderer.setClearColor(0xf5e6b8, 1)
+    renderer.setClearColor(0xe0d0a8, 1)
 
     scene = new THREE.Scene()
     updateSceneBackground(w, h)
@@ -439,7 +445,12 @@ export function useDandelionThreeScene(
     camera.position.set(0, 0, 100)
 
     const renderPass = new RenderPass(scene, camera)
-    const bloom = new UnrealBloomPass(new THREE.Vector2(w, h), 0.55, 0.35, 0.62)
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(w, h),
+      BLOOM_STRENGTH,
+      BLOOM_RADIUS,
+      BLOOM_THRESHOLD,
+    )
     composer = new EffectComposer(renderer)
     composer.addPass(renderPass)
     composer.addPass(bloom)
@@ -489,7 +500,7 @@ export function useDandelionThreeScene(
       const hw = pxToWorld(head.x, head.y, canvasW, canvasH)
       headGlow.position.set(hw.x, hw.y, -2)
       const mat = headGlow.material as THREE.MeshBasicMaterial
-      mat.opacity = 0.14 + Math.sin(lastTimestamp * 0.002) * 0.05
+      mat.opacity = 0.06 + Math.sin(lastTimestamp * 0.002) * 0.02
     }
   }
 

@@ -68,10 +68,10 @@ const overlayOpacity = computed(() =>
   cursor: crosshair;
   user-select: none;
   background:
-    radial-gradient(circle at 15% 12%, rgba(255, 248, 210, 0.95), transparent 38%),
-    radial-gradient(circle at 88% 18%, rgba(255, 235, 170, 0.85), transparent 34%),
-    radial-gradient(circle at 50% 100%, rgba(210, 175, 95, 0.55), transparent 42%),
-    linear-gradient(168deg, #fff8e6 0%, #f5e6b8 38%, #e8d49a 68%, #dcc888 100%);
+    radial-gradient(circle at 15% 12%, rgba(240, 225, 180, 0.35), transparent 32%),
+    radial-gradient(circle at 88% 18%, rgba(235, 215, 165, 0.28), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(200, 170, 110, 0.22), transparent 36%),
+    linear-gradient(168deg, #ede0c4 0%, #e0d0a8 38%, #d4c490 68%, #c8b878 100%);
 }
 
 .layer {

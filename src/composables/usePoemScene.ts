@@ -68,9 +68,9 @@ interface Particle {
 }
 
 /** 竖排列间距 */
-const COL_SP = 1.75
+const COL_SP = 1.25
 /** 竖排行间距 */
-const ROW_SP = 1.55
+const ROW_SP = 1.0
 /** 主诗文字号 */
 const CHAR_SIZE = 0.52
 /** 主诗文字深度 */
@@ -86,7 +86,7 @@ const GROUND_CHAR_MIN = 0.32
 /** 地面字最大尺寸 */
 const GROUND_CHAR_MAX = 0.84
 /** 地面额外干扰字数量 */
-const GROUND_EXTRA_COUNT = 56
+const GROUND_EXTRA_COUNT = 156
 /** 背景字 Z 深度 */
 const BG_Z = -14
 /** 背景字网格单元尺寸 */
