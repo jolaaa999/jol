@@ -171,8 +171,10 @@ export function useDandelionThreeScene(
 
   /** 当前蒲公英阶段 */
   const phase = ref<DandelionPhase>('idle')
-  /** 过渡淡出不透明度 [0, 1] */
-  const fadeOpacity = ref(1)
+  /** 飘散进度 [0, 1] — spreading 阶段线性推进 */
+  const spreadProgress = ref(0)
+  /** 末段白光强度 [0, 1] — 供 Landing 亮光过渡层使用 */
+  const lightIntensity = ref(0)
 
   /** WebGL 渲染器 */
   let renderer: THREE.WebGLRenderer | null = null
@@ -182,6 +184,8 @@ export function useDandelionThreeScene(
   let camera: THREE.OrthographicCamera | null = null
   /** 后处理合成器 */
   let composer: EffectComposer | null = null
+  /** Bloom 后处理通道（飘散阶段动态增亮） */
+  let bloomPass: UnrealBloomPass | null = null
   /** Verlet 物理引擎 */
   let engine: PhysicsEngine | null = null
   /** 绒球粒子运行时列表 */
@@ -445,7 +449,7 @@ export function useDandelionThreeScene(
     camera.position.set(0, 0, 100)
 
     const renderPass = new RenderPass(scene, camera)
-    const bloom = new UnrealBloomPass(
+    bloomPass = new UnrealBloomPass(
       new THREE.Vector2(w, h),
       BLOOM_STRENGTH,
       BLOOM_RADIUS,
@@ -453,7 +457,7 @@ export function useDandelionThreeScene(
     )
     composer = new EffectComposer(renderer)
     composer.addPass(renderPass)
-    composer.addPass(bloom)
+    composer.addPass(bloomPass)
 
     buildScene(w, h)
   }
@@ -597,8 +601,9 @@ export function useDandelionThreeScene(
     const dtSec = dt * 0.055
     const cx = canvasW / 2
     const cy = headPx.y
-    const fillBoost = phase.value === 'spreading' ? 2.5 : 1
-    const friction = phase.value === 'spreading' ? 0.993 : 0.988
+    const spreadP = spreadProgress.value
+    const fillBoost = phase.value === 'spreading' ? 2.5 + spreadP * 5.5 : 1
+    const friction = phase.value === 'spreading' ? 0.994 + spreadP * 0.004 : 0.988
 
     for (const fp of fluffParticles) {
       if (!fp.detached) continue
@@ -697,11 +702,31 @@ export function useDandelionThreeScene(
     } else if (phase.value === 'blowing' || phase.value === 'spreading') {
       updateDetachedPhysics(timestamp, dt)
       const elapsed = timestamp - spreadStartTime
-      const progress = elapsed / spreadDuration
-      fadeOpacity.value = Math.max(0, 1 - progress * 0.35)
+      const progress = Math.min(1, elapsed / spreadDuration)
+      spreadProgress.value = progress
+
+      /** 粒子逐渐放大、增亮，营造「充满屏幕」感 */
+      if (points) {
+        const mat = points.material as THREE.PointsMaterial
+        mat.opacity = 0.58 + progress * 0.42
+        mat.size = PARTICLE_SIZE * (1 + progress * 2.4)
+      }
+
+      /** 末段拉高 Bloom，配合 Landing 白光层 */
+      if (bloomPass) {
+        bloomPass.strength = BLOOM_STRENGTH + progress * 1.35
+        bloomPass.radius = BLOOM_RADIUS + progress * 0.42
+        bloomPass.threshold = Math.max(0.28, BLOOM_THRESHOLD - progress * 0.62)
+      }
+
+      /** 55% 之后白光渐起，100% 时全屏过曝 */
+      lightIntensity.value =
+        progress < 0.55 ? 0 : Math.pow((progress - 0.55) / 0.45, 1.35)
 
       if (elapsed >= spreadDuration) {
         phase.value = 'done'
+        spreadProgress.value = 1
+        lightIntensity.value = 1
         onTransitionComplete?.()
       }
     }
@@ -832,7 +857,8 @@ export function useDandelionThreeScene(
 
   return {
     phase,
-    fadeOpacity,
+    spreadProgress,
+    lightIntensity,
     onPointerMove,
     onPointerLeave,
     triggerBlow,

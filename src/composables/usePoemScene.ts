@@ -86,7 +86,7 @@ const GROUND_CHAR_MIN = 0.32
 /** 地面字最大尺寸 */
 const GROUND_CHAR_MAX = 0.84
 /** 地面额外干扰字数量 */
-const GROUND_EXTRA_COUNT = 156
+const GROUND_EXTRA_COUNT = 1056
 /** 背景字 Z 深度 */
 const BG_Z = -14
 /** 背景字网格单元尺寸 */
@@ -165,11 +165,11 @@ export function usePoemScene(
   /** 创建发光诗文字材质 */
   function createGlowMaterial(): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
-      color: 0xfff0c8,
-      emissive: 0xffd070,
-      emissiveIntensity: 0.42,
-      metalness: 0.15,
-      roughness: 0.55,
+      color: 0xfff8e8,
+      emissive: 0xffe090,
+      emissiveIntensity: 0.95,
+      metalness: 0.22,
+      roughness: 0.38,
     })
   }
 
@@ -345,6 +345,16 @@ export function usePoemScene(
     }
   }
 
+  /** 更新中心诗文字呼吸辉光 */
+  function updatePoemGlow(time: number): void {
+    const pulse = 0.9 + Math.sin(time * 1.35) * 0.1
+    poemGroup.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh) || obj.userData.isPlaceholder) return
+      const mat = obj.material as THREE.MeshStandardMaterial
+      mat.emissiveIntensity = 0.88 * pulse
+    })
+  }
+
   /** 更新背景字闪烁发光 */
   function updateBackgroundSparkle(time: number): void {
     for (const bg of backgroundChars) {
@@ -462,6 +472,10 @@ export function usePoemScene(
     const rim = new THREE.PointLight(0xffb040, 0.45, 40)
     rim.position.set(-5, 3, -3)
     scene.add(rim)
+    /** 中心诗文暖光 — 强化主字辉光 */
+    const poemKey = new THREE.PointLight(0xffe8a8, 1.35, 18)
+    poemKey.position.set(0, 1.2, 4)
+    scene.add(poemKey)
 
     scene.add(backgroundGroup)
     scene.add(poemGroup)
@@ -470,9 +484,9 @@ export function usePoemScene(
     const renderPass = new RenderPass(scene, camera)
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(width, height),
-      0.38,
-      0.45,
-      0.72,
+      0.55,
+      0.52,
+      0.52,
     )
     composer = new EffectComposer(renderer)
     composer.addPass(renderPass)
@@ -636,8 +650,8 @@ export function usePoemScene(
         )
         const mat = glowMesh.material as THREE.MeshStandardMaterial
         const emissive = { intensity: mat.emissiveIntensity }
-        gsap.fromTo(emissive, { intensity: 0.65 }, {
-          intensity: 0.42,
+        gsap.fromTo(emissive, { intensity: 1.35 }, {
+          intensity: 0.95,
           duration: 0.5,
           ease: 'power2.out',
           onUpdate: () => {
@@ -787,6 +801,7 @@ export function usePoemScene(
     const dt = clock.getDelta()
 
     if (phase.value === 'playing') {
+      updatePoemGlow(clock.elapsedTime)
       updateBackgroundSparkle(clock.elapsedTime)
       groundGroup.children.forEach((c, i) => {
         c.position.y = GROUND_Y + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
