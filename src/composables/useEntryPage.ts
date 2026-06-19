@@ -1,5 +1,11 @@
 import { onMounted, onUnmounted, ref, type Ref } from 'vue'
 import gsap from 'gsap'
+import {
+  playStaggeredMaskedTextHide,
+  playStaggeredMaskedTextReveal,
+  setMaskedTextHidden,
+  STAGGERED_MASKED_TEXT_DEFAULTS,
+} from '@/composables/useStaggeredMaskedTextReveal'
 
 /** 菜单导航项 */
 export interface EntryMenuItem {
@@ -14,9 +20,8 @@ const MENU_PANEL_CLIP_OPEN = 'inset(0 0 0 0)'
 
 /** 菜单开合缓动：与 --ease-damped 一致的机械阻尼感 */
 const MENU_EASE = 'power2.inOut'
-const MENU_EASE_OUT = 'power3.out'
 
-/** 入口页 GSAP 编排：Hero 逐字冒起 + 三层递进覆盖菜单 */
+/** 入口页 GSAP 编排：Hero 逐字坠落 + 三层递进覆盖菜单 */
 export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
   const menuOpen = ref(false)
   const isAnimating = ref(false)
@@ -28,7 +33,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches
   }
 
-  /** Hero 区入场：逐字 / 逐块从下方冒出 */
+  /** Hero 区入场：标题逐字从上方掉落，其余块级内容紧随其后 */
   function playHeroEntrance(): void {
     if (!rootRef.value) return
 
@@ -40,46 +45,57 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       return
     }
 
-    gsap.set(chars, { yPercent: 115, opacity: 0.2 })
-    gsap.set(blocks, { yPercent: 110, opacity: 0 })
+    /* 初始态：藏在遮罩顶缘外，待重力感下落 */
+    gsap.set(chars, { yPercent: -115, opacity: 0 })
+    gsap.set(blocks, { yPercent: -110, opacity: 0 })
 
     gsap
       .timeline({ defaults: { ease: 'power4.out' } })
       .to(chars, {
         yPercent: 0,
         opacity: 1,
-        duration: 0.82,
-        stagger: { each: 0.038, ease: 'power2.out' },
+        duration: 0.74,
+        stagger: { each: 0.045, ease: 'power2.out' },
       })
       .to(
         blocks,
         {
           yPercent: 0,
           opacity: 1,
-          duration: 0.72,
+          duration: 0.68,
           stagger: 0.1,
-          ease: 'power3.out',
+          ease: 'expo.out',
         },
-        '-=0.35',
+        '-=0.32',
       )
   }
 
-  /** 获取菜单三层 DOM */
+  /** 获取菜单三层 DOM 与文本遮罩节点 */
   function getMenuLayers(root: HTMLElement) {
     return {
       layer1: root.querySelector('[data-menu-layer="1"]'),
       layer2: root.querySelector('[data-menu-layer="2"]'),
       panel: root.querySelector('[data-menu-panel]'),
       backdrop: root.querySelector('[data-menu-backdrop]'),
-      revealEls: root.querySelectorAll('[data-menu-reveal]'),
+      /** 导航主项：HOME / POETRY 等，优先错落展开 */
+      navTextEls: root.querySelectorAll('[data-menu-nav-text]'),
+      /** 其余菜单文本：Close / Credits / Footer */
+      menuTextEls: root.querySelectorAll('[data-menu-text-inner]'),
     }
+  }
+
+  /** 重置全部菜单内层文本为遮罩顶外隐藏 */
+  function resetMenuTextHidden(root: HTMLElement): void {
+    const { navTextEls, menuTextEls } = getMenuLayers(root)
+    setMaskedTextHidden(navTextEls)
+    setMaskedTextHidden(menuTextEls)
   }
 
   /** 菜单层初始：色带 scaleX 收拢于右缘，白面板 clip 隐藏 */
   function initMenuClosed(): void {
     if (!rootRef.value) return
 
-    const { layer1, layer2, panel, backdrop, revealEls } = getMenuLayers(rootRef.value)
+    const { layer1, layer2, panel, backdrop } = getMenuLayers(rootRef.value)
 
     gsap.set([layer1, layer2], {
       scaleX: 0,
@@ -88,7 +104,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     })
     gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
     gsap.set(backdrop, { opacity: 0 })
-    gsap.set(revealEls, { yPercent: 110, opacity: 0 })
+    resetMenuTextHidden(rootRef.value)
   }
 
   /** 菜单打开：黑 → 紫 → 白，从浏览器右缘连续向左展开（无缝隙） */
@@ -100,7 +116,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     document.body.style.overflow = 'hidden'
 
     const reduced = prefersReducedMotion()
-    const { layer1, layer2, panel, backdrop, revealEls } = getMenuLayers(rootRef.value)
+    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } = getMenuLayers(rootRef.value)
 
     menuTimeline?.kill()
     menuTimeline = gsap.timeline({
@@ -113,7 +129,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: 'right center' })
       gsap.set(panel, { clipPath: MENU_PANEL_CLIP_OPEN })
       gsap.set(backdrop, { opacity: 1 })
-      gsap.set(revealEls, { yPercent: 0, opacity: 1 })
+      gsap.set([...navTextEls, ...menuTextEls], { yPercent: 0 })
       isAnimating.value = false
       return
     }
@@ -125,39 +141,38 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     })
     gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
     gsap.set(backdrop, { opacity: 0 })
-    gsap.set(revealEls, { yPercent: 110, opacity: 0 })
+    resetMenuTextHidden(rootRef.value)
 
     menuTimeline
       .to(backdrop, { opacity: 1, duration: 0.75, ease: 'power2.out' }, 0)
-      /* 黑色条：贴右缘 scaleX 展开，像从屏幕侧面推出 */
       .to(
         layer1,
         { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
         0,
       )
-      /* 紫色条：紧挨黑色向左延伸，时序重叠保证连贯 */
       .to(
         layer2,
         { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
         0.09,
       )
-      /* 白色面板：clip 从左向右打开，文字不被 scale 挤压 */
       .to(
         panel,
         { clipPath: MENU_PANEL_CLIP_OPEN, duration: 0.62, ease: MENU_EASE },
         0.18,
       )
-      .to(
-        revealEls,
-        {
-          yPercent: 0,
-          opacity: 1,
-          duration: 0.68,
-          stagger: { each: 0.052, ease: 'power2.out' },
-          ease: MENU_EASE_OUT,
-        },
-        0.42,
-      )
+
+    playStaggeredMaskedTextReveal(menuTimeline, navTextEls, {
+      position: 0.4,
+      stagger: STAGGERED_MASKED_TEXT_DEFAULTS.stagger,
+      duration: STAGGERED_MASKED_TEXT_DEFAULTS.duration,
+      ease: STAGGERED_MASKED_TEXT_DEFAULTS.ease,
+    })
+    playStaggeredMaskedTextReveal(menuTimeline, menuTextEls, {
+      position: '-=0.38',
+      stagger: 0.07,
+      duration: 0.68,
+      ease: 'expo.out',
+    })
   }
 
   /** 菜单关闭：文字收回 → 白 → 紫 → 黑，逆序贴右缘收回 */
@@ -167,7 +182,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     isAnimating.value = true
 
     const reduced = prefersReducedMotion()
-    const { layer1, layer2, panel, backdrop, revealEls } = getMenuLayers(rootRef.value)
+    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } = getMenuLayers(rootRef.value)
 
     menuTimeline?.kill()
 
@@ -179,6 +194,8 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       return
     }
 
+    const allMenuTextEls = [...navTextEls, ...menuTextEls]
+
     menuTimeline = gsap.timeline({
       onComplete: () => {
         menuOpen.value = false
@@ -188,18 +205,12 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       },
     })
 
+    playStaggeredMaskedTextHide(menuTimeline, allMenuTextEls, { position: 0 })
     menuTimeline
-      .to(revealEls, {
-        yPercent: 110,
-        opacity: 0,
-        duration: 0.22,
-        stagger: { each: 0.014, ease: 'power2.in' },
-        ease: 'power2.in',
-      })
       .to(
         panel,
         { clipPath: MENU_PANEL_CLIP_CLOSED, duration: 0.48, ease: MENU_EASE },
-        '-=0.02',
+        0.18,
       )
       .to(
         layer2,
