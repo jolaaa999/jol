@@ -61,7 +61,9 @@ const DEFAULT_SPREAD_MS = 2800
 /** 茎秆受鼠标风强度倍率 */
 const MOUSE_WIND_STEM = 0.32
 /** 绒球受鼠标风强度倍率 */
-const MOUSE_WIND_FLUFF = 0.18
+const MOUSE_WIND_FLUFF = 0.22
+/** 刀刃风场最大感知速度（px/frame） */
+const BLADE_SPEED_REF = 24
 /** 无鼠标时环境风强度倍率（仅轻微摇曳） */
 const AMBIENT_WIND_IDLE = 0.018
 /** 有鼠标时环境风强度倍率 */
@@ -161,6 +163,70 @@ function computeMouseWind(
   }
 }
 
+/** 划动速度 → 冲击强度 [0, 1]，快划非线性放大 */
+function computeSwipeIntensity(speed: number): number {
+  const t = Math.min(1, speed / BLADE_SPEED_REF)
+  return Math.pow(t, 1.5)
+}
+
+/** 点到线段的最短距离 */
+function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const sdx = bx - ax
+  const sdy = by - ay
+  const lenSq = sdx * sdx + sdy * sdy
+  if (lenSq < 1) return Math.hypot(px - ax, py - ay)
+  const t = Math.max(0, Math.min(1, ((px - ax) * sdx + (py - ay) * sdy) / lenSq))
+  return Math.hypot(px - (ax + sdx * t), py - (ay + sdy * t))
+}
+
+/** 刀刃风场 — 沿划动轨迹切开，速度越快冲击越强 */
+function computeBladeWind(
+  from: Vec2,
+  to: Vec2,
+  target: Vec2,
+  speed: number,
+  radius: number,
+  baseStrength: number,
+): Vec2 {
+  const sdx = to.x - from.x
+  const sdy = to.y - from.y
+  const swipeLen = Math.hypot(sdx, sdy)
+  const intensity = computeSwipeIntensity(speed)
+
+  if (swipeLen < 1.5) {
+    return computeMouseWind(to, target, radius, baseStrength * (0.15 + intensity * 0.85))
+  }
+
+  const ux = sdx / swipeLen
+  const uy = sdy / swipeLen
+  const perpX = -uy
+  const perpY = ux
+
+  const tx = target.x - from.x
+  const ty = target.y - from.y
+  const proj = tx * ux + ty * uy
+  const clampedProj = Math.max(0, Math.min(swipeLen, proj))
+  const closestX = from.x + ux * clampedProj
+  const closestY = from.y + uy * clampedProj
+
+  const pdx = target.x - closestX
+  const pdy = target.y - closestY
+  const perpDist = Math.hypot(pdx, pdy)
+  if (perpDist > radius) return { x: 0, y: 0 }
+
+  const bladeFalloff = Math.pow(1 - perpDist / radius, 1.35)
+  const alongFalloff = 0.65 + 0.35 * (1 - Math.abs(clampedProj / swipeLen - 0.5) * 2)
+  const push = baseStrength * intensity * bladeFalloff * alongFalloff * (1.6 + speed * 0.065)
+
+  const splitSign =
+    perpDist < 0.5 ? (Math.random() > 0.5 ? 1 : -1) : Math.sign(pdx * perpX + pdy * perpY) || 1
+
+  return {
+    x: ux * push * 1.35 + perpX * splitSign * push * 0.72,
+    y: uy * push * 1.1 + perpY * splitSign * push * 0.58,
+  }
+}
+
 /** 像素坐标转正交相机世界坐标 */
 function pxToWorld(px: number, py: number, w: number, h: number): THREE.Vector3 {
   return new THREE.Vector3(px - w / 2, h / 2 - py, 0)
@@ -215,6 +281,8 @@ export function useDandelionThreeScene(
   let prevMouse: Vec2 | null = null
   /** 鼠标移动速度（像素/帧，用于静止时削弱风力） */
   let mouseSpeed = 0
+  /** 最近一次触发吹散时的划动速度 */
+  let lastSwipeSpeed = 0
   /** 花头物理粒子索引 */
   let headEngineId = 0
   /** requestAnimationFrame 句柄 */
@@ -557,11 +625,13 @@ export function useDandelionThreeScene(
     const hoverPull = hasMouse && headDist < hoverRadius
       ? Math.pow(1 - headDist / hoverRadius, 1.5)
       : 0
-    /** 静止鼠标时趋近 0.12，快速划过时趋近 1 */
-    const moveFactor = hasMouse ? Math.min(1, 0.12 + mouseSpeed * 0.06) : 0
+    /** 快划时非线性放大，慢移几乎无冲击 */
+    const swipeIntensity = hasMouse ? computeSwipeIntensity(mouseSpeed) : 0
+    const moveFactor = hasMouse ? 0.06 + swipeIntensity * 0.94 : 0
     const ambientScale = hasMouse ? AMBIENT_WIND_HOVER : AMBIENT_WIND_IDLE
     const fsStem = dt * 0.003
-    const fsFluff = dt * 0.0022
+    const fsFluff = dt * 0.0022 * (1 + swipeIntensity * 3.2)
+    const useBlade = hasMouse && prevMouse && mouseSpeed > 2.5
 
     engine.step(dt, (p, i) => {
       if (p.pinned) return { x: 0, y: 0 }
@@ -584,13 +654,12 @@ export function useDandelionThreeScene(
       }
 
       const wind = sharedPerlin.sampleWindField(p.x, p.y, time, 0.0035, 2)
+      const fluffStrength = (MOUSE_WIND_FLUFF + hoverPull * 0.14) * moveFactor
+      const fluffRadius = headSpread * (useBlade ? 0.78 : 0.6)
       const mouseWind = hasMouse
-        ? computeMouseWind(
-            mouse!,
-            p,
-            headSpread * 0.6,
-            (MOUSE_WIND_FLUFF + hoverPull * 0.1) * moveFactor,
-          )
+        ? useBlade
+          ? computeBladeWind(prevMouse!, mouse!, p, mouseSpeed, fluffRadius, fluffStrength)
+          : computeMouseWind(mouse!, p, fluffRadius, fluffStrength)
         : { x: 0, y: 0 }
       return {
         x: (wind.x * ambientScale * 3.2 + mouseWind.x) * fsFluff,
@@ -600,14 +669,31 @@ export function useDandelionThreeScene(
   }
 
   /** 断开所有绒球粒子与花头的弹簧 */
-  function detachAll(): void {
+  function detachAll(swipeSpeed = 0, swipeFrom?: Vec2, swipeTo?: Vec2): void {
     if (!engine) return
     const head = engine.particles[headEngineId]
     const seedIds = new Set(fluffParticles.map((f) => f.engineId))
+    const intensity = 0.55 + computeSwipeIntensity(swipeSpeed) * 1.65
 
     engine.springs = engine.springs.filter(
       (s) => !seedIds.has(s.a) && !seedIds.has(s.b),
     )
+
+    let bladeUx = 0
+    let bladeUy = -1
+    let perpX = 1
+    let perpY = 0
+    if (swipeFrom && swipeTo) {
+      const sdx = swipeTo.x - swipeFrom.x
+      const sdy = swipeTo.y - swipeFrom.y
+      const swipeLen = Math.hypot(sdx, sdy)
+      if (swipeLen > 2) {
+        bladeUx = sdx / swipeLen
+        bladeUy = sdy / swipeLen
+        perpX = -bladeUy
+        perpY = bladeUx
+      }
+    }
 
     for (const fp of fluffParticles) {
       const p = engine.particles[fp.engineId]
@@ -620,9 +706,18 @@ export function useDandelionThreeScene(
       const dx = p.x - head.x
       const dy = p.y - head.y
       const dist = Math.hypot(dx, dy) || 1
-      const burst = 5 + Math.random() * 5
-      fp.vx += (dx / dist) * burst + (Math.random() - 0.5) * 2.5
-      fp.vy += (dy / dist) * burst * 0.5 - 1.5 - Math.random() * 2
+      const burst = (5 + Math.random() * 5) * intensity
+      fp.vx += (dx / dist) * burst + (Math.random() - 0.5) * 2.5 * intensity
+      fp.vy += (dy / dist) * burst * 0.5 - 1.5 * intensity - Math.random() * 2
+
+      /** 刀刃切开 — 沿划动方向 + 两侧飞散 */
+      if (swipeTo && swipeSpeed > 1) {
+        const side = (fp.px - swipeTo.x) * perpX + (fp.py - swipeTo.y) * perpY
+        const splitSign = side === 0 ? (Math.random() > 0.5 ? 1 : -1) : Math.sign(side)
+        const slash = intensity * (7 + swipeSpeed * 0.42)
+        fp.vx += bladeUx * slash + perpX * splitSign * slash * 0.55
+        fp.vy += bladeUy * slash * 0.85 + perpY * splitSign * slash * 0.45
+      }
     }
 
     if (headGlow) {
@@ -639,7 +734,8 @@ export function useDandelionThreeScene(
     const cx = canvasW / 2
     const cy = headPx.y
     const spreadP = spreadProgress.value
-    const fillBoost = phase.value === 'spreading' ? 2.5 + spreadP * 5.5 : 1
+    const slashBoost = 1 + computeSwipeIntensity(lastSwipeSpeed) * 1.1
+    const fillBoost = phase.value === 'spreading' ? (2.5 + spreadP * 5.5) * slashBoost : 1
     const friction = phase.value === 'spreading' ? 0.994 + spreadP * 0.004 : 0.988
 
     for (const fp of fluffParticles) {
@@ -668,21 +764,38 @@ export function useDandelionThreeScene(
     }
   }
 
-  /** 触发吹散 — 脱离粒子并施加冲量 */
-  function triggerBlow(originX?: number, originY?: number): void {
+  /** 触发吹散 — 脱离粒子并施加与划速成正比的刀刃冲量 */
+  function triggerBlow(
+    originX?: number,
+    originY?: number,
+    swipeSpeed = 0,
+    swipeFromX?: number,
+    swipeFromY?: number,
+  ): void {
     if (phase.value !== 'idle' || !engine) return
     phase.value = 'blowing'
     spreadStartTime = performance.now()
-    detachAll()
+    lastSwipeSpeed = swipeSpeed
+
+    const swipeFrom =
+      swipeFromX !== undefined && swipeFromY !== undefined
+        ? { x: swipeFromX, y: swipeFromY }
+        : undefined
+    const swipeTo =
+      originX !== undefined && originY !== undefined ? { x: originX, y: originY } : undefined
+
+    detachAll(swipeSpeed, swipeFrom, swipeTo)
 
     if (originX !== undefined && originY !== undefined) {
+      const slashIntensity = 0.5 + computeSwipeIntensity(swipeSpeed) * 1.5
       for (const fp of fluffParticles) {
         const dx = fp.px - originX
         const dy = fp.py - originY
         const dist = Math.hypot(dx, dy) || 1
         const push = Math.max(0, 1 - dist / (headSpread * 1.2))
-        fp.vx += (dx / dist) * push * 5
-        fp.vy += (dy / dist) * push * 3 - push * 0.6
+        const impulse = push * slashIntensity * (6 + swipeSpeed * 0.38)
+        fp.vx += (dx / dist) * impulse
+        fp.vy += (dy / dist) * impulse * 0.65 - push * slashIntensity * 0.8
       }
     }
 
@@ -788,7 +901,11 @@ export function useDandelionThreeScene(
 
     prevMouse = mouse ?? { x, y }
     mouse = { x, y }
-    mouseSpeed = Math.hypot(e.movementX, e.movementY)
+    mouseSpeed = Math.max(
+      mouseSpeed * 0.72,
+      Math.hypot(e.movementX, e.movementY),
+      Math.hypot(x - prevMouse.x, y - prevMouse.y),
+    )
 
     if (phase.value !== 'idle' || !engine) return
 
@@ -797,36 +914,39 @@ export function useDandelionThreeScene(
     const enterRadius = headSpread * 1.1
     if (dist >= enterRadius) return
 
-    const speed = Math.max(
-      Math.hypot(e.movementX, e.movementY),
-      Math.hypot(x - prevMouse.x, y - prevMouse.y),
-    )
+    const speed = mouseSpeed
     const proximity = Math.pow(1 - dist / enterRadius, 1.1)
-    const triggerAmount = Math.min(1, Math.max(0.12, speed / 12)) * proximity
+    const speedIntensity = computeSwipeIntensity(speed)
+    const triggerAmount = Math.min(1, (0.08 + speedIntensity * 0.92) * proximity)
 
     let peakWarmup = 0
     let warmedCount = 0
-    const seedRadius = headSpread * 0.65
+    const seedRadius = headSpread * 0.72
+    const speedBoost = 0.45 + speedIntensity * 2.2
 
     for (const fp of fluffParticles) {
       if (fp.detached) continue
       const p = engine.particles[fp.engineId]
-      const sDist = Math.hypot(p.x - x, p.y - y)
-      if (sDist < seedRadius) {
-        const warm = Math.max(0, 1 - sDist / seedRadius)
+      const sDist = distToSegment(p.x, p.y, prevMouse.x, prevMouse.y, x, y)
+      const hitRadius = speed > 3 ? seedRadius * 1.05 : seedRadius * 0.65
+      if (sDist < hitRadius) {
+        const warm = Math.max(0, 1 - sDist / hitRadius)
         const layerBoost = [0.7, 0.95, 1.15][fp.layer] ?? 0.85
-        fp.warmup = Math.min(1, fp.warmup + warm * triggerAmount * layerBoost * 0.12)
+        fp.warmup = Math.min(
+          1,
+          fp.warmup + warm * triggerAmount * layerBoost * 0.16 * speedBoost,
+        )
         peakWarmup = Math.max(peakWarmup, fp.warmup)
         if (fp.warmup > 0.35) warmedCount++
       }
     }
 
-    const fastSwipe = speed > 4 && triggerAmount > 0.25
-    const enoughWarmth = warmedCount >= 32 && peakWarmup >= 0.5
-    const deepWarmth = peakWarmup >= 0.68 && speed > 2
+    const fastSwipe = speed > 2.5 && speedIntensity > 0.18 && triggerAmount > 0.18
+    const enoughWarmth = warmedCount >= 28 && peakWarmup >= 0.48
+    const deepWarmth = peakWarmup >= 0.62 && speedIntensity > 0.12
 
     if (fastSwipe || enoughWarmth || deepWarmth) {
-      triggerBlow(x, y)
+      triggerBlow(x, y, speed, prevMouse.x, prevMouse.y)
     }
   }
 
