@@ -80,9 +80,9 @@ async function revealUnlockFromLight(): Promise<void> {
   })
 }
 
-/** 诗文解锁完成后跳转至博客页 */
+/** 诗文解锁完成后跳转至入口主页 */
 function onUnlockComplete(): void {
-  router.push('/blog')
+  router.push('/entry')
 }
 
 /** 空闲阶段且未解锁时显示操作提示 */

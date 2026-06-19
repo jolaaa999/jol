@@ -1,9 +1,17 @@
 <script setup lang="ts">
-import { RouterView, useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import MechanicalNav from '@/components/MechanicalNav.vue'
 
 /** Vue Router 实例 */
 const router = useRouter()
+/** 当前路由 */
+const route = useRoute()
+
+/** 沉浸式页面不显示浮动机械导航 */
+const showMechanicalNav = computed(
+  () => route.name !== 'landing' && route.name !== 'entry',
+)
 
 /** 处理机械导航跳转，支持 hash 锚点平滑滚动 */
 function onNavigate(to: string): void {
@@ -27,5 +35,5 @@ function onNavigate(to: string): void {
 
 <template>
   <RouterView />
-  <MechanicalNav @navigate="onNavigate" />
+  <MechanicalNav v-if="showMechanicalNav" @navigate="onNavigate" />
 </template>

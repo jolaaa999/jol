@@ -13,6 +13,13 @@ const router = createRouter({
       meta: { layout: 'blank' },
     },
     {
+      path: '/entry',
+      name: 'entry',
+      /** 解锁后入口主页：流体 Hero + 多层菜单 */
+      component: () => import('@/views/EntryPage.vue'),
+      meta: { layout: 'blank' },
+    },
+    {
       path: '/blog',
       /** 异步加载应用壳层布局 */
       component: () => import('@/components/layout/AppShell.vue'),
