@@ -76,11 +76,11 @@ interface Particle {
 }
 
 /** 竖排列间距 */
-const COL_SP = 1.25
+const COL_SP = 1.48
 /** 竖排行间距 */
-const ROW_SP = 1.0
+const ROW_SP = 1.22
 /** 主诗文字号 */
-const CHAR_SIZE = 0.52
+const CHAR_SIZE = 0.64
 /** 主诗文字深度 */
 const CHAR_DEPTH = 0.08
 /** 背景字字号 */
