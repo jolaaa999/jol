@@ -9,25 +9,25 @@ export interface EntryMenuItem {
 }
 
 /** 入口页 GSAP 编排：Hero 逐字冒起 + 多层菜单展开 */
-export function useEntryPage(
-  rootRef: Ref<HTMLElement | null>,
-  menuItems: EntryMenuItem[],
-) {
+export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
   const menuOpen = ref(false)
   const isAnimating = ref(false)
 
   let ctx: gsap.Context | null = null
   let menuTimeline: gsap.core.Timeline | null = null
 
+  function prefersReducedMotion(): boolean {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  }
+
   /** Hero 区入场：逐字 / 逐块从下方冒出 */
   function playHeroEntrance(): void {
     if (!rootRef.value) return
 
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const chars = rootRef.value.querySelectorAll('[data-hero-char]')
     const blocks = rootRef.value.querySelectorAll('[data-hero-block]')
 
-    if (reduced) {
+    if (prefersReducedMotion()) {
       gsap.set([...chars, ...blocks], { yPercent: 0, opacity: 1 })
       return
     }
@@ -35,14 +35,14 @@ export function useEntryPage(
     gsap.set(chars, { yPercent: 115, opacity: 0.2 })
     gsap.set(blocks, { yPercent: 110, opacity: 0 })
 
-    const tl = gsap.timeline({ defaults: { ease: 'power4.out' } })
-
-    tl.to(chars, {
-      yPercent: 0,
-      opacity: 1,
-      duration: 0.82,
-      stagger: { each: 0.038, ease: 'power2.out' },
-    })
+    gsap
+      .timeline({ defaults: { ease: 'power4.out' } })
+      .to(chars, {
+        yPercent: 0,
+        opacity: 1,
+        duration: 0.82,
+        stagger: { each: 0.038, ease: 'power2.out' },
+      })
       .to(
         blocks,
         {
@@ -56,20 +56,34 @@ export function useEntryPage(
       )
   }
 
-  /** 菜单打开：三层色带递进滑入 + 链接逐条冒起 */
+  /** 菜单层与面板初始：全部在视口右侧外 */
+  function initMenuClosed(): void {
+    if (!rootRef.value) return
+
+    const layers = rootRef.value.querySelectorAll('[data-menu-layer]')
+    const panel = rootRef.value.querySelector('[data-menu-panel]')
+    const backdrop = rootRef.value.querySelector('[data-menu-backdrop]')
+    const revealEls = rootRef.value.querySelectorAll('[data-menu-reveal]')
+
+    gsap.set(layers, { xPercent: 100 })
+    gsap.set(panel, { xPercent: 100 })
+    gsap.set(backdrop, { opacity: 0 })
+    gsap.set(revealEls, { yPercent: 110, opacity: 0 })
+  }
+
+  /** 菜单打开：色带递进滑入 → 文字逐条从遮罩下冒出 */
   function openMenu(): void {
     if (!rootRef.value || menuOpen.value || isAnimating.value) return
 
     menuOpen.value = true
     isAnimating.value = true
+    document.body.style.overflow = 'hidden'
 
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduced = prefersReducedMotion()
     const layers = rootRef.value.querySelectorAll('[data-menu-layer]')
     const panel = rootRef.value.querySelector('[data-menu-panel]')
-    const items = rootRef.value.querySelectorAll('[data-menu-item-inner]')
-    const closeBtn = rootRef.value.querySelector('[data-menu-close-inner]')
-    const credits = rootRef.value.querySelector('[data-menu-credits-inner]')
-    const footer = rootRef.value.querySelectorAll('[data-menu-footer-inner]')
+    const backdrop = rootRef.value.querySelector('[data-menu-backdrop]')
+    const revealEls = rootRef.value.querySelectorAll('[data-menu-reveal]')
 
     menuTimeline?.kill()
     menuTimeline = gsap.timeline({
@@ -79,23 +93,30 @@ export function useEntryPage(
     })
 
     if (reduced) {
-      gsap.set([layers, panel], { xPercent: 0, opacity: 1 })
-      gsap.set([items, closeBtn, credits, ...footer], { yPercent: 0, opacity: 1 })
+      gsap.set([layers, panel], { xPercent: 0 })
+      gsap.set(backdrop, { opacity: 1 })
+      gsap.set(revealEls, { yPercent: 0, opacity: 1 })
       isAnimating.value = false
       return
     }
 
-    gsap.set(layers, { xPercent: 108, opacity: 1 })
-    gsap.set(panel, { xPercent: 108, opacity: 1 })
-    gsap.set([items, closeBtn, credits, ...footer], { yPercent: 115, opacity: 0 })
+    gsap.set(layers, { xPercent: 100 })
+    gsap.set(panel, { xPercent: 100 })
+    gsap.set(backdrop, { opacity: 0 })
+    gsap.set(revealEls, { yPercent: 110, opacity: 0 })
 
     menuTimeline
-      .to(layers, {
-        xPercent: 0,
-        duration: 0.78,
-        stagger: 0.09,
-        ease: 'power3.inOut',
-      })
+      .to(backdrop, { opacity: 1, duration: 0.55, ease: 'power2.out' }, 0)
+      .to(
+        layers,
+        {
+          xPercent: 0,
+          duration: 0.72,
+          stagger: 0.1,
+          ease: 'power3.inOut',
+        },
+        0.04,
+      )
       .to(
         panel,
         {
@@ -103,105 +124,85 @@ export function useEntryPage(
           duration: 0.68,
           ease: 'power3.inOut',
         },
-        '-=0.52',
+        '-=0.48',
       )
       .to(
-        closeBtn,
+        revealEls,
         {
           yPercent: 0,
           opacity: 1,
-          duration: 0.55,
+          duration: 0.78,
+          stagger: { each: 0.085, ease: 'power2.out' },
           ease: 'power4.out',
         },
-        '-=0.28',
-      )
-      .to(
-        items,
-        {
-          yPercent: 0,
-          opacity: 1,
-          duration: 0.72,
-          stagger: { each: 0.09, ease: 'power2.out' },
-          ease: 'power4.out',
-        },
-        '-=0.38',
-      )
-      .to(
-        credits,
-        {
-          yPercent: 0,
-          opacity: 1,
-          duration: 0.6,
-          ease: 'power3.out',
-        },
-        '-=0.42',
-      )
-      .to(
-        footer,
-        {
-          yPercent: 0,
-          opacity: 1,
-          duration: 0.55,
-          stagger: 0.06,
-          ease: 'power3.out',
-        },
-        '-=0.35',
+        '-=0.22',
       )
   }
 
-  /** 菜单关闭：逆序收回 */
+  /** 菜单关闭：文字先收回 → 面板与色带逆序滑出 */
   function closeMenu(): void {
     if (!rootRef.value || !menuOpen.value || isAnimating.value) return
 
     isAnimating.value = true
 
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const reduced = prefersReducedMotion()
     const layers = rootRef.value.querySelectorAll('[data-menu-layer]')
     const panel = rootRef.value.querySelector('[data-menu-panel]')
-    const items = rootRef.value.querySelectorAll('[data-menu-item-inner]')
-    const closeBtn = rootRef.value.querySelector('[data-menu-close-inner]')
-    const credits = rootRef.value.querySelector('[data-menu-credits-inner]')
-    const footer = rootRef.value.querySelectorAll('[data-menu-footer-inner]')
+    const backdrop = rootRef.value.querySelector('[data-menu-backdrop]')
+    const revealEls = rootRef.value.querySelectorAll('[data-menu-reveal]')
 
     menuTimeline?.kill()
 
     if (reduced) {
       menuOpen.value = false
+      document.body.style.overflow = ''
       isAnimating.value = false
+      initMenuClosed()
       return
     }
 
     menuTimeline = gsap.timeline({
       onComplete: () => {
         menuOpen.value = false
+        document.body.style.overflow = ''
         isAnimating.value = false
+        initMenuClosed()
       },
     })
 
     menuTimeline
-      .to([...footer, credits, ...items, closeBtn], {
-        yPercent: 115,
+      .to(revealEls, {
+        yPercent: 110,
         opacity: 0,
-        duration: 0.32,
-        stagger: 0.03,
+        duration: 0.28,
+        stagger: 0.025,
         ease: 'power2.in',
       })
       .to(
         panel,
         {
-          xPercent: 108,
-          duration: 0.55,
+          xPercent: 100,
+          duration: 0.52,
           ease: 'power3.inOut',
         },
-        '-=0.12',
+        '-=0.08',
       )
       .to(
         layers,
         {
-          xPercent: 108,
-          duration: 0.58,
-          stagger: 0.06,
+          xPercent: 100,
+          duration: 0.55,
+          stagger: 0.05,
           ease: 'power3.inOut',
+        },
+        '-=0.38',
+      )
+      .to(
+        backdrop,
+        {
+          opacity: 0,
+          duration: 0.4,
+          ease: 'power2.in',
         },
         '-=0.42',
       )
@@ -215,18 +216,19 @@ export function useEntryPage(
   onMounted(() => {
     if (!rootRef.value) return
     ctx = gsap.context(() => {
+      initMenuClosed()
       playHeroEntrance()
     }, rootRef.value)
   })
 
   onUnmounted(() => {
     menuTimeline?.kill()
+    document.body.style.overflow = ''
     ctx?.revert()
   })
 
   return {
     menuOpen,
-    menuItems,
     toggleMenu,
     openMenu,
     closeMenu,

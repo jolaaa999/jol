@@ -23,7 +23,7 @@ const menuItems: EntryMenuItem[] = [
   { id: 'contact', label: 'CONTACT', href: 'mailto:hello@jol.dev' },
 ]
 
-const { menuOpen, toggleMenu, closeMenu } = useEntryPage(rootRef, menuItems)
+const { menuOpen, toggleMenu, closeMenu } = useEntryPage(rootRef)
 const { cyclePalette } = useFluidGradient(canvasRef)
 
 /** 导航至目标路径，支持 hash 锚点 */
@@ -135,66 +135,83 @@ function enterBlog(): void {
       :class="{ 'entry__menu--open': menuOpen }"
       :aria-hidden="!menuOpen"
     >
-      <div class="entry__menu-layers" aria-hidden="true">
+      <div
+        class="entry__menu-backdrop"
+        data-menu-backdrop
+        aria-hidden="true"
+        @click="closeMenu"
+      />
+
+      <div class="entry__menu-drawer">
         <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer />
         <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer />
-        <div class="entry__menu-layer entry__menu-layer--3" data-menu-layer />
-      </div>
 
-      <aside class="entry__menu-panel" data-menu-panel>
-        <button
-          type="button"
-          class="entry__menu-close"
-          @click="closeMenu"
-        >
-          <span class="entry__menu-close-inner" data-menu-close-inner>
-            <span>Close</span>
-            <span aria-hidden="true">×</span>
-          </span>
-        </button>
+        <aside class="entry__menu-panel" data-menu-panel>
+          <button type="button" class="entry__menu-close" @click="closeMenu">
+            <span class="entry__menu-close-mask">
+              <span class="entry__menu-close-inner" data-menu-reveal>
+                <span>Close</span>
+                <span aria-hidden="true">×</span>
+              </span>
+            </span>
+          </button>
 
-        <nav class="entry__menu-nav" aria-label="站点导航">
-          <a
-            v-for="item in menuItems"
-            :key="item.id"
-            class="entry__menu-link"
-            :href="item.href"
-            @click.prevent="navigateTo(item.href)"
-          >
-            <span class="entry__menu-link-inner" data-menu-item-inner>{{ item.label }}</span>
-          </a>
-        </nav>
-
-        <a
-          class="entry__menu-credits"
-          href="https://github.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span class="entry__menu-credits-inner" data-menu-credits-inner>
-            Credits
-            <span class="entry__menu-arrow" aria-hidden="true">↗</span>
-          </span>
-        </a>
-
-        <footer class="entry__menu-footer">
-          <span class="entry__menu-footer-label" data-menu-footer-inner>Socials</span>
-          <div class="entry__menu-footer-links">
-            <button type="button" class="entry__menu-footer-link" data-menu-footer-inner @click="cyclePalette">
-              切换背景
-            </button>
+          <nav class="entry__menu-nav" aria-label="站点导航">
             <a
-              class="entry__menu-footer-link"
-              data-menu-footer-inner
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
+              v-for="item in menuItems"
+              :key="item.id"
+              class="entry__menu-link"
+              :href="item.href"
+              @click.prevent="navigateTo(item.href)"
             >
-              GitHub
+              <span class="entry__menu-link-mask">
+                <span class="entry__menu-link-inner" data-menu-reveal>{{ item.label }}</span>
+              </span>
             </a>
-          </div>
-        </footer>
-      </aside>
+          </nav>
+
+          <a
+            class="entry__menu-credits"
+            href="https://github.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="entry__menu-credits-mask">
+              <span class="entry__menu-credits-inner" data-menu-reveal>
+                Credits
+                <span class="entry__menu-arrow" aria-hidden="true">↗</span>
+              </span>
+            </span>
+          </a>
+
+          <footer class="entry__menu-footer">
+            <span class="entry__menu-footer-label-mask">
+              <span class="entry__menu-footer-label" data-menu-reveal>Socials</span>
+            </span>
+            <div class="entry__menu-footer-links">
+              <button
+                type="button"
+                class="entry__menu-footer-link"
+                @click="cyclePalette"
+              >
+                <span class="entry__menu-footer-link-mask">
+                  <span data-menu-reveal>切换背景</span>
+                </span>
+              </button>
+              <a
+                class="entry__menu-footer-link"
+                href="https://github.com"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="entry__menu-footer-link-mask">
+                  <span data-menu-reveal>GitHub</span>
+                </span>
+              </a>
+            </div>
+          </footer>
+        </aside>
+      </div>
     </div>
   </div>
 </template>
@@ -407,125 +424,142 @@ function enterBlog(): void {
   opacity: 1;
 }
 
-/* ── 多层菜单 ── */
+/* ── 多层侧栏菜单 ── */
 .entry__menu {
   position: fixed;
   inset: 0;
   z-index: 100;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .entry__menu--open {
   pointer-events: auto;
+  visibility: visible;
 }
 
-.entry__menu-layers {
+.entry__menu-backdrop {
   position: absolute;
   inset: 0;
+  background: rgba(4, 6, 14, 0.42);
+  opacity: 0;
+}
+
+.entry__menu-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: row;
+  align-items: stretch;
 }
 
 .entry__menu-layer {
+  flex-shrink: 0;
   height: 100%;
   will-change: transform;
 }
 
-.entry__menu:not(.entry__menu--open) .entry__menu-layer,
-.entry__menu:not(.entry__menu--open) .entry__menu-panel {
-  transform: translateX(108%);
-}
-
 .entry__menu-layer--1 {
-  width: clamp(2.5rem, 5vw, 4rem);
+  width: clamp(1.75rem, 3.2vw, 2.75rem);
   background: #0a0e1a;
 }
 
 .entry__menu-layer--2 {
-  width: clamp(3.5rem, 7vw, 5.5rem);
-  background: linear-gradient(180deg, #2a18a8 0%, #1a4fd4 100%);
-}
-
-.entry__menu-layer--3 {
-  width: clamp(1.5rem, 3vw, 2.5rem);
-  background: rgba(255, 255, 255, 0.08);
+  width: clamp(2.75rem, 5vw, 4.25rem);
+  background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
 }
 
 .entry__menu-panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: min(92vw, 28rem);
+  flex-shrink: 0;
+  width: clamp(17rem, 34vw, 24rem);
   height: 100%;
-  padding: clamp(1.25rem, 3vw, 2rem);
+  padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
   background: #fafafa;
   color: #0a0a0b;
   display: flex;
   flex-direction: column;
   will-change: transform;
-  box-shadow: -24px 0 64px rgba(0, 0, 0, 0.18);
+  box-shadow: -20px 0 48px rgba(0, 0, 0, 0.14);
 }
 
 .entry__menu-close {
   align-self: flex-end;
-  margin-bottom: clamp(2rem, 8vh, 4rem);
+  margin: 0 0 clamp(2.5rem, 9vh, 5rem);
   padding: 0;
   border: none;
   background: none;
   cursor: pointer;
 }
 
+.entry__menu-close-mask {
+  display: block;
+  overflow: hidden;
+  height: 2.125rem;
+}
+
 .entry__menu-close-inner {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.55rem 1rem;
+  gap: 0.45rem;
+  padding: 0.5rem 1rem;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.09);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
-  color: #888;
+  color: #8a8a8a;
   will-change: transform;
 }
 
 .entry__menu-nav {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: clamp(0.15rem, 0.8vh, 0.35rem);
   flex: 1;
 }
 
 .entry__menu-link {
   display: block;
-  overflow: hidden;
   text-decoration: none;
   color: inherit;
-  padding: 0.15rem 0;
+}
+
+.entry__menu-link-mask {
+  display: block;
+  overflow: hidden;
+  height: 1.06em;
+  font-size: clamp(2.5rem, 5.8vw, 3.65rem);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.06;
 }
 
 .entry__menu-link-inner {
   display: block;
-  font-size: clamp(2.25rem, 6vw, 3.25rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
   will-change: transform;
-  transition: opacity 0.3s var(--ease-mechanical);
+  transition: opacity 0.28s var(--ease-mechanical);
 }
 
 .entry__menu-link:hover .entry__menu-link-inner {
-  opacity: 0.55;
+  opacity: 0.48;
 }
 
 .entry__menu-credits {
   display: inline-block;
-  overflow: hidden;
-  margin-bottom: 2rem;
+  margin-bottom: clamp(1.5rem, 4vh, 2.5rem);
   text-decoration: none;
   color: #6b28d9;
   font-family: var(--font-mono);
   font-size: 0.875rem;
+}
+
+.entry__menu-credits-mask {
+  display: block;
+  overflow: hidden;
+  height: 1.4em;
+  line-height: 1.4;
 }
 
 .entry__menu-credits-inner {
@@ -540,24 +574,31 @@ function enterBlog(): void {
 }
 
 .entry__menu-footer {
-  padding-top: 1.5rem;
+  padding-top: 1.35rem;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.entry__menu-footer-label-mask {
+  display: block;
+  overflow: hidden;
+  height: 1.35em;
+  margin-bottom: 0.75rem;
 }
 
 .entry__menu-footer-label {
   display: block;
-  margin-bottom: 0.65rem;
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #6b28d9;
+  will-change: transform;
 }
 
 .entry__menu-footer-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 1.35rem;
 }
 
 .entry__menu-footer-link {
@@ -566,19 +607,31 @@ function enterBlog(): void {
   background: none;
   font-family: var(--font-sans);
   font-size: 0.875rem;
-  color: #333;
+  color: #2a2a2a;
   text-decoration: none;
   cursor: pointer;
+}
+
+.entry__menu-footer-link-mask {
+  display: block;
+  overflow: hidden;
+  height: 1.35em;
+  line-height: 1.35;
+}
+
+.entry__menu-footer-link-mask span {
+  display: block;
+  will-change: transform;
   transition: opacity 0.25s var(--ease-mechanical);
 }
 
-.entry__menu-footer-link:hover {
-  opacity: 0.55;
+.entry__menu-footer-link:hover span {
+  opacity: 0.5;
 }
 
 @media (max-width: 640px) {
   .entry__menu-panel {
-    width: min(96vw, 100%);
+    width: min(88vw, 20rem);
   }
 
   .entry__menu-layer--1 {
@@ -586,11 +639,7 @@ function enterBlog(): void {
   }
 
   .entry__menu-layer--2 {
-    width: 1.75rem;
-  }
-
-  .entry__menu-layer--3 {
-    width: 0.75rem;
+    width: 2rem;
   }
 }
 </style>
