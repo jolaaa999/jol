@@ -107,6 +107,14 @@ const GROUND_CHAR_MIN = 0.32
 const GROUND_CHAR_MAX = 0.84
 /** 干扰字最小间距（世界坐标） */
 const GROUND_CHAR_MIN_GAP = 0.72
+/** 干扰字 Z 远端 — 小字更深 */
+const GROUND_Z_FAR = -3.4
+/** 干扰字 Z 近端 — 大字更靠前 */
+const GROUND_Z_NEAR = 1.85
+/** 正确答案地面字 Z — 略靠前便于点击 */
+const GROUND_Z_CORRECT = 1.35
+/** 中心诗文 renderOrder — 始终压在最上层 */
+const POEM_RENDER_ORDER = 1200
 /** 解体粒子每个顶点额外子粒子数 */
 const DISSOLVE_SUB_PARTICLES = 2
 /** 默认流光解体时长 (ms) */
@@ -300,11 +308,13 @@ export function usePoemScene(
 
       if (slot.isBlank) {
         const ph = makeBlankPlaceholder(pos)
+        tagPoemRenderOrder(ph)
         poemGroup.add(ph)
         entry.placeholder = ph
       } else {
         const mesh = makeTextMesh(font, slot.char, createGlowMaterial())
         mesh.position.copy(pos)
+        tagPoemRenderOrder(mesh)
         poemGroup.add(mesh)
         entry.mesh = mesh
       }
@@ -409,6 +419,51 @@ export function usePoemScene(
     }
   }
 
+  /** 将地面字号归一化到 [0, 1] */
+  function normalizeGroundCharSize(charSize: number): number {
+    return THREE.MathUtils.clamp(
+      (charSize - GROUND_CHAR_MIN) / (GROUND_CHAR_MAX - GROUND_CHAR_MIN),
+      0,
+      1,
+    )
+  }
+
+  /** 按字号映射 Z 深度 — 越大越靠近镜头 */
+  function sizeToGroundZ(charSize: number, isCorrect: boolean): number {
+    if (isCorrect) return GROUND_Z_CORRECT
+    const t = normalizeGroundCharSize(charSize)
+    return THREE.MathUtils.lerp(GROUND_Z_FAR, GROUND_Z_NEAR, t)
+  }
+
+  /** 为地面字分配 Z 深度、renderOrder 与远近透明度 */
+  function applyGroundDepthLayering(): void {
+    for (const tile of groundTiles) {
+      const charSize = tile.sizeRatio * CHAR_SIZE
+      const z = sizeToGroundZ(charSize, tile.isCorrect)
+      tile.mesh.position.z = z
+      tile.mesh.userData.baseZ = z
+
+      if (tile.isCorrect) {
+        tile.mesh.renderOrder = 920
+        continue
+      }
+
+      const t = normalizeGroundCharSize(charSize)
+      tile.mesh.renderOrder = 120 + Math.round(t * 760)
+      const mat = tile.mesh.material as THREE.MeshStandardMaterial
+      mat.transparent = true
+      mat.opacity = THREE.MathUtils.lerp(0.7, 1.0, t)
+      mat.depthWrite = t > 0.52
+    }
+
+    groundGroup.children.sort((a, b) => a.renderOrder - b.renderOrder)
+  }
+
+  /** 标记诗文 Mesh 始终在最上层 */
+  function tagPoemRenderOrder(mesh: THREE.Mesh): void {
+    mesh.renderOrder = POEM_RENDER_ORDER
+  }
+
   /** 随机地面字尺寸（正确字偏大） */
   function randomGroundCharSize(isCorrect: boolean): number {
     if (isCorrect) {
@@ -423,9 +478,12 @@ export function usePoemScene(
   function pickNonOverlappingPosition(
     charRadius: number,
     placed: PlacedGroundSlot[],
+    charSize: number,
+    isCorrect: boolean,
   ): THREE.Vector3 | null {
+    const z = sizeToGroundZ(charSize, isCorrect)
+
     for (let attempt = 0; attempt < 64; attempt++) {
-      const z = (Math.random() - 0.5) * 10
       const dist = Math.abs(camera!.position.z - z)
       const vFov = (camera!.fov * Math.PI) / 180
       const visibleH = 2 * Math.tan(vFov / 2) * dist
@@ -453,7 +511,7 @@ export function usePoemScene(
     return null
   }
 
-  /** 构建全屏散落字块 — 干扰字更多、互不重叠 */
+  /** 构建全屏散落字块 — 干扰字更多、互不重叠，按字号分层 */
   function buildGroundChars(font: Font, layout: PoemLayout): void {
     groundGroup.clear()
     groundTiles.length = 0
@@ -479,7 +537,7 @@ export function usePoemScene(
     for (const item of pool) {
       const charSize = randomGroundCharSize(item.isCorrect)
       const charRadius = charSize * 0.55
-      const pos = pickNonOverlappingPosition(charRadius, placed)
+      const pos = pickNonOverlappingPosition(charRadius, placed, charSize, item.isCorrect)
       if (!pos) continue
 
       placed.push({ x: pos.x, y: pos.y, z: pos.z, radius: charRadius })
@@ -496,6 +554,7 @@ export function usePoemScene(
       mesh.userData.groundChar = true
       mesh.userData.isDistractor = !item.isCorrect
       mesh.userData.baseY = pos.y
+      mesh.userData.baseZ = pos.z
       groundGroup.add(mesh)
 
       groundTiles.push({
@@ -509,6 +568,8 @@ export function usePoemScene(
         speed: item.isCorrect ? undefined : 0.35 + Math.random() * 0.85,
       })
     }
+
+    applyGroundDepthLayering()
   }
 
   // ── 初始化 / 销毁 ──
@@ -718,6 +779,7 @@ export function usePoemScene(
 
         const glowMesh = makeTextMesh(font, tile.char, createGlowMaterial())
         glowMesh.position.copy(slot.targetPos)
+        tagPoemRenderOrder(glowMesh)
         poemGroup.add(glowMesh)
         slot.mesh = glowMesh
 
@@ -893,7 +955,13 @@ export function usePoemScene(
       groundGroup.children.forEach((c, i) => {
         if (!c.visible) return
         const baseY = (c.userData.baseY as number | undefined) ?? c.position.y
-        c.position.y = baseY + Math.sin(clock.elapsedTime * 0.8 + i) * 0.02
+        const baseZ = c.userData.baseZ as number | undefined
+        const depthT =
+          baseZ !== undefined
+            ? THREE.MathUtils.clamp((baseZ - GROUND_Z_FAR) / (GROUND_Z_NEAR - GROUND_Z_FAR), 0, 1)
+            : 0.5
+        const bobAmp = 0.012 + depthT * 0.022
+        c.position.y = baseY + Math.sin(clock.elapsedTime * 0.8 + i * 0.37) * bobAmp
       })
     }
 
