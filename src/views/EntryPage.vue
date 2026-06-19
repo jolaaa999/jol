@@ -82,7 +82,9 @@ function enterBlog(): void {
     </header>
 
     <main class="entry__hero">
-      <p class="entry__eyebrow entry__iridescent entry__iridescent--hero" data-hero-block>HELLO, WORLD</p>
+      <div class="entry__hero-block-mask">
+        <p class="entry__eyebrow entry__iridescent entry__iridescent--hero" data-hero-block>HELLO, WORLD</p>
+      </div>
 
       <h1 class="entry__headline" aria-label="Hi, I'm JOL">
         <span
@@ -94,12 +96,15 @@ function enterBlog(): void {
         </span>
       </h1>
 
-      <p class="entry__bio entry__iridescent entry__iridescent--hero" data-hero-block>
-        Developer &amp; creator. Building digital experiences that merge
-        technical precision with fluid aesthetics.
-      </p>
+      <div class="entry__hero-block-mask entry__hero-block-mask--bio">
+        <p class="entry__bio entry__iridescent entry__iridescent--hero" data-hero-block>
+          Developer &amp; creator. Building digital experiences that merge
+          technical precision with fluid aesthetics.
+        </p>
+      </div>
 
-      <div class="entry__actions" data-hero-block>
+      <div class="entry__hero-block-mask entry__hero-block-mask--actions">
+        <div class="entry__actions" data-hero-block>
         <button type="button" class="entry__cta entry__cta--primary" @click="enterBlog">
           <svg class="entry__cta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
@@ -126,6 +131,7 @@ function enterBlog(): void {
         >
           发送邮件联系
         </a>
+        </div>
       </div>
     </main>
 
@@ -349,14 +355,22 @@ function enterBlog(): void {
 
 .entry__char {
   display: inline-block;
-  /* GSAP 加载前：字母藏在遮罩顶缘外 */
-  transform: translateY(-115%);
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
-[data-hero-block] {
-  transform: translateY(-110%);
-  opacity: 0;
+/* 块级 Hero 内容遮罩：配合 yPercent 从顶缘外落入 */
+.entry__hero-block-mask {
+  overflow: hidden;
+}
+
+.entry__hero-block-mask--bio {
+  max-width: 32rem;
+  margin: 0 0 2.25rem;
+}
+
+.entry__hero-block-mask--actions {
+  display: flex;
+  justify-content: center;
 }
 
 /* ── 炫彩渐变文字：与流体背景色板呼应 ── */
@@ -429,8 +443,7 @@ function enterBlog(): void {
 }
 
 .entry__bio {
-  max-width: 32rem;
-  margin: 0 0 2.25rem;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: clamp(0.8125rem, 1.6vw, 0.9375rem);
   font-weight: 300;

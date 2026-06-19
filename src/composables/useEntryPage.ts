@@ -33,7 +33,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches
   }
 
-  /** Hero 区入场：标题逐字从上方掉落，其余块级内容紧随其后 */
+  /** Hero 区入场：标题逐字从上方掉入遮罩，块级内容紧随其后（仅位移，不透明度保持 1） */
   function playHeroEntrance(): void {
     if (!rootRef.value) return
 
@@ -45,26 +45,26 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       return
     }
 
-    /* 初始态：藏在遮罩顶缘外，待重力感下落 */
-    gsap.set(chars, { yPercent: -115, opacity: 0 })
-    gsap.set(blocks, { yPercent: -110, opacity: 0 })
+    /* 渐变字不可配合 opacity:0，仅用 yPercent 藏在遮罩顶外 */
+    gsap.set(chars, { yPercent: -110, opacity: 1, force3D: true })
+    gsap.set(blocks, { yPercent: -110, opacity: 1, force3D: true })
 
     gsap
       .timeline({ defaults: { ease: 'power4.out' } })
       .to(chars, {
         yPercent: 0,
-        opacity: 1,
         duration: 0.74,
         stagger: { each: 0.045, ease: 'power2.out' },
+        force3D: true,
       })
       .to(
         blocks,
         {
           yPercent: 0,
-          opacity: 1,
           duration: 0.68,
           stagger: 0.1,
           ease: 'expo.out',
+          force3D: true,
         },
         '-=0.32',
       )
