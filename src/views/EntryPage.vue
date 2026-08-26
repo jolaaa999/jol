@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
 import { usePageTransition } from '@/composables/usePageTransition'
 import WorksShowcase from '@/components/works/WorksShowcase.vue'
+import SiteFooter from '@/components/layout/SiteFooter.vue'
 import { FLUID_CYCLE_KEY } from '@/composables/fluidGradientContext'
 
 /** 页面根元素 */
@@ -23,7 +24,7 @@ const menuItems: EntryMenuItem[] = [
   { id: 'home', label: 'HOME', href: '/blog' },
   { id: 'works', label: 'WORKS', href: '#works' },
   { id: 'reflections', label: 'REFLECTIONS', href: '/blog#reflections' },
-  { id: 'contact', label: 'CONTACT', href: 'mailto:hello@jol.dev' },
+  { id: 'contact', label: 'CONTACT', href: '#contact' },
 ]
 
 const { menuOpen, isExiting, toggleMenu, closeMenu, playPageExit } = useEntryPage(rootRef)
@@ -167,7 +168,7 @@ function scrollToWorks(): void {
 
         <a
           class="entry__cta entry__cta--ghost"
-          href="mailto:hello@jol.dev"
+          href="mailto:2843422418@qq.com"
         >
           发送邮件联系
         </a>
@@ -176,6 +177,8 @@ function scrollToWorks(): void {
     </main>
 
     <WorksShowcase />
+
+    <SiteFooter />
 
     <div
       id="entry-menu"

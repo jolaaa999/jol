@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import gsap from 'gsap'
 import NavBar from './NavBar.vue'
+import SiteFooter from './SiteFooter.vue'
 import { usePageTransition } from '@/composables/usePageTransition'
 
 const shellRef = ref<HTMLElement | null>(null)
@@ -32,6 +33,7 @@ onMounted(() => {
         <RouterView />
       </slot>
     </main>
+    <SiteFooter />
   </div>
 </template>
 
