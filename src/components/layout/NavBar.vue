@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGsapNav, type NavSegment } from '@/composables/useGsapNav'
 
@@ -11,8 +11,8 @@ const indicatorRef = ref<HTMLElement | null>(null)
 /** 主导航分段配置 */
 const segments: NavSegment[] = [
   { id: 'home', label: '首页', href: '/blog' },
-  { id: 'posts', label: '文章', href: '/posts' },
-  { id: 'about', label: '关于', href: '/about' },
+  { id: 'poetry', label: '诗文', href: '/blog#poetry' },
+  { id: 'reflections', label: '有感', href: '/blog#reflections' },
 ]
 
 /** GSAP 导航指示条动画与悬停交互 */
@@ -22,11 +22,47 @@ const router = useRouter()
 /** 当前路由信息 */
 const route = useRoute()
 
+/** 判断分段是否与当前路由匹配（含 hash） */
+function isSegmentActive(seg: NavSegment): boolean {
+  const hashIdx = seg.href.indexOf('#')
+  if (hashIdx !== -1) {
+    const path = seg.href.slice(0, hashIdx)
+    const hash = seg.href.slice(hashIdx)
+    return route.path === path && route.hash === hash
+  }
+  return route.path === seg.href && !route.hash
+}
+
+/** 同步指示条到当前路由对应分段 */
+function syncIndicator(): void {
+  const index = segments.findIndex(isSegmentActive)
+  if (index >= 0 && indicatorRef.value) {
+    animateIndicator(indicatorRef.value, index)
+  }
+}
+
 /** 点击导航分段：驱动指示条动画并路由跳转 */
 function onSegmentClick(index: number, href: string): void {
   if (indicatorRef.value) animateIndicator(indicatorRef.value, index)
-  if (route.path !== href) router.push(href)
+
+  const hashIdx = href.indexOf('#')
+  if (hashIdx === -1) {
+    if (route.path !== href) router.push(href)
+    return
+  }
+
+  const path = href.slice(0, hashIdx)
+  const hash = href.slice(hashIdx)
+  router.push({ path, hash })
 }
+
+onMounted(() => {
+  nextTick(syncIndicator)
+})
+
+watch(() => route.fullPath, () => {
+  nextTick(syncIndicator)
+})
 </script>
 
 <template>
@@ -50,7 +86,7 @@ function onSegmentClick(index: number, href: string): void {
           data-nav-segment
           type="button"
           class="nav-segment"
-          :class="{ 'is-active': route.path === seg.href }"
+          :class="{ 'is-active': isSegmentActive(seg) }"
           @click="onSegmentClick(i, seg.href)"
           @mouseenter="hoverSegment($event.currentTarget as HTMLElement, true)"
           @mouseleave="hoverSegment($event.currentTarget as HTMLElement, false)"

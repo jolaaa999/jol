@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
 import { useFluidGradient } from '@/composables/useFluidGradient'
@@ -10,6 +10,9 @@ const rootRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 /** Vue Router */
 const router = useRouter()
+
+/** 菜单关闭后延迟导航的定时器 */
+let navigateTimeoutId = 0
 
 /** 主标题逐字拆分 */
 const HEADLINE = "Hi, I'm JOL"
@@ -26,7 +29,7 @@ const menuItems: EntryMenuItem[] = [
 const { menuOpen, toggleMenu, closeMenu } = useEntryPage(rootRef)
 const { cyclePalette } = useFluidGradient(canvasRef)
 
-/** 导航至目标路径，支持 hash 锚点 */
+/** 导航至目标路径（hash 滚动由 router scrollBehavior 统一处理） */
 function navigateTo(href: string): void {
   closeMenu()
 
@@ -35,20 +38,22 @@ function navigateTo(href: string): void {
     return
   }
 
-  const hashIdx = href.indexOf('#')
-  if (hashIdx === -1) {
-    setTimeout(() => router.push(href), 380)
-    return
-  }
-
-  const path = href.slice(0, hashIdx)
-  const hash = href.slice(hashIdx)
-  setTimeout(() => {
-    router.push({ path, hash }).then(() => {
-      document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
+  clearTimeout(navigateTimeoutId)
+  navigateTimeoutId = window.setTimeout(() => {
+    const hashIdx = href.indexOf('#')
+    if (hashIdx === -1) {
+      router.push(href)
+      return
+    }
+    const path = href.slice(0, hashIdx)
+    const hash = href.slice(hashIdx)
+    router.push({ path, hash })
   }, 380)
 }
+
+onUnmounted(() => {
+  clearTimeout(navigateTimeoutId)
+})
 
 /** 主 CTA：进入博客 */
 function enterBlog(): void {
@@ -154,7 +159,7 @@ function enterBlog(): void {
           <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
           <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
           <aside class="entry__menu-panel" data-menu-panel>
-          <button type="button" class="entry__menu-close" @click="closeMenu">
+          <button type="button" class="entry__menu-close" aria-label="关闭菜单" @click="closeMenu">
             <span class="entry__menu-close-mask" data-menu-text-mask>
               <span class="entry__menu-close-inner" data-menu-text-inner>
                 <span class="entry__iridescent entry__iridescent--menu">Close</span>
@@ -182,7 +187,7 @@ function enterBlog(): void {
 
           <a
             class="entry__menu-credits"
-            href="https://github.com"
+            href="https://github.com/jolaaa999/jol"
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -213,7 +218,7 @@ function enterBlog(): void {
               </button>
               <a
                 class="entry__menu-footer-link"
-                href="https://github.com"
+                href="https://github.com/jolaaa999/jol"
                 target="_blank"
                 rel="noopener noreferrer"
               >

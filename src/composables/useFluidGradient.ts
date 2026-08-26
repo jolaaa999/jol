@@ -47,6 +47,8 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
   let startTime = 0
   let width = 0
   let height = 0
+  let paused = false
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   function getPalette(): FluidPalette {
     return FLUID_PALETTES[paletteIndex.value % FLUID_PALETTES.length]!
@@ -64,14 +66,14 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
     ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
-  function draw(now: number): void {
+  function drawFrame(now: number): void {
     const canvas = canvasRef.value
     if (!canvas || width === 0 || height === 0) return
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const t = (now - startTime) * 0.00018
+    const t = reducedMotion ? 0 : (now - startTime) * 0.00018
     const palette = getPalette()
     const [c0, c1, c2] = palette.base
 
@@ -97,24 +99,52 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
       ctx.fillRect(0, 0, width, height)
     }
     ctx.globalCompositeOperation = 'source-over'
+  }
 
+  function draw(now: number): void {
+    drawFrame(now)
+    if (!paused && !reducedMotion) {
+      rafId = requestAnimationFrame(draw)
+    }
+  }
+
+  function startLoop(): void {
+    cancelAnimationFrame(rafId)
+    if (reducedMotion) {
+      drawFrame(performance.now())
+      return
+    }
     rafId = requestAnimationFrame(draw)
+  }
+
+  function onVisibilityChange(): void {
+    paused = document.hidden
+    if (paused) {
+      cancelAnimationFrame(rafId)
+    } else {
+      startLoop()
+    }
   }
 
   function cyclePalette(): void {
     paletteIndex.value = (paletteIndex.value + 1) % FLUID_PALETTES.length
+    if (reducedMotion || paused) {
+      drawFrame(performance.now())
+    }
   }
 
   onMounted(() => {
     resize()
     startTime = performance.now()
-    rafId = requestAnimationFrame(draw)
+    startLoop()
     window.addEventListener('resize', resize)
+    document.addEventListener('visibilitychange', onVisibilityChange)
   })
 
   onUnmounted(() => {
     cancelAnimationFrame(rafId)
     window.removeEventListener('resize', resize)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
   })
 
   return { paletteIndex, cyclePalette }

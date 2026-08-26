@@ -34,8 +34,20 @@ const router = createRouter({
       ],
     },
   ],
-  /** 路由切换时滚动至页面顶部 */
-  scrollBehavior() {
+  /** 路由切换：支持 hash 锚点平滑滚动，否则回到顶部 */
+  scrollBehavior(to, _from, savedPosition) {
+    if (savedPosition) return savedPosition
+    if (to.hash) {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          resolve({
+            el: to.hash,
+            top: 80,
+            behavior: 'smooth',
+          })
+        })
+      })
+    }
     return { top: 0 }
   },
 })

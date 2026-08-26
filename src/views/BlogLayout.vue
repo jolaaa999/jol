@@ -7,6 +7,7 @@ export interface BlogEntry {
   id: string
   title: string
   excerpt: string
+  content: string
   date: string
 }
 
@@ -16,18 +17,21 @@ const poetryEntries = ref<BlogEntry[]>([
     id: 'p-001',
     title: '静夜',
     excerpt: '月色落在窗棂上，像一段未完成的代码，等待被编译成梦。',
+    content: '月色落在窗棂上，\n像一段未完成的代码，\n等待被编译成梦。',
     date: '2026-05-12',
   },
   {
     id: 'p-002',
     title: '风过草原',
     excerpt: '蒲公英解体的那一秒，整片草原都在悄悄重写自己的坐标系。',
+    content: '蒲公英解体的那一秒，\n整片草原都在悄悄重写自己的坐标系。',
     date: '2026-04-28',
   },
   {
     id: 'p-003',
     title: '拓扑',
     excerpt: '节点与边构成世界，我们在毛玻璃后面，阅读自己的连接度。',
+    content: '节点与边构成世界，\n我们在毛玻璃后面，\n阅读自己的连接度。',
     date: '2026-03-15',
   },
 ])
@@ -38,24 +42,29 @@ const reflectionEntries = ref<BlogEntry[]>([
     id: 'r-001',
     title: '关于克制',
     excerpt: '好的界面像好的诗。每一个元素都有存在的理由，其余皆是噪声。',
+    content: '好的界面像好的诗——每个元素都有存在的理由，其余皆是噪声。',
     date: '2026-06-01',
   },
   {
     id: 'r-002',
     title: '物理与感知',
     excerpt: 'Verlet 积分教会我，平滑的动画不是插值出来的，而是被力推导出来的。',
+    content: 'Verlet 积分教会我：平滑的动画不是插值出来的，而是被力推导出来的。',
     date: '2026-05-20',
   },
   {
     id: 'r-003',
-    title: '终末地的灯',
+    title: '终末地的灰',
     excerpt: '暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。',
+    content: '暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。',
     date: '2026-05-08',
   },
 ])
 
-/** 文章流同步状态：加载中 / 已就绪 / 离线 */
-const streamStatus = ref<'loading' | 'ready' | 'offline'>('loading')
+/** 文章流同步状态：加载中 / 已同步 / 本地占位 */
+const streamStatus = ref<'loading' | 'synced' | 'local'>('loading')
+/** 当前展开阅读的文章 */
+const activeEntry = ref<BlogEntry | null>(null)
 
 /** 精选展示条目（优先有感，否则诗文） */
 const featuredEntry = computed(() => reflectionEntries.value[0] ?? poetryEntries.value[0])
@@ -87,8 +96,19 @@ function toEntry(article: ArticleResponse['data'][number]): BlogEntry {
     id: article.id,
     title: article.title,
     excerpt: article.content.replace(/\n/g, ' ').slice(0, 96),
+    content: article.content,
     date: article.created_at.slice(0, 10),
   }
+}
+
+/** 展开文章阅读面板 */
+function openEntry(entry: BlogEntry): void {
+  activeEntry.value = entry
+}
+
+/** 关闭文章阅读面板 */
+function closeEntry(): void {
+  activeEntry.value = null
 }
 
 /** 挂载后并行拉取诗文与文章 API，失败则保持离线占位数据 */
@@ -105,15 +125,18 @@ onMounted(async () => {
     const poetryData = (await poetryRes.json()) as ArticleResponse
     const postsData = (await postsRes.json()) as ArticleResponse
 
+    let synced = false
     if (poetryData.data?.length) {
       poetryEntries.value = poetryData.data.map(toEntry)
+      synced = true
     }
     if (postsData.data?.length) {
       reflectionEntries.value = postsData.data.map(toEntry)
+      synced = true
     }
-    streamStatus.value = 'ready'
+    streamStatus.value = synced ? 'synced' : 'local'
   } catch {
-    streamStatus.value = 'offline'
+    streamStatus.value = 'local'
   }
 })
 </script>
@@ -140,7 +163,7 @@ onMounted(async () => {
             <span class="readout-label">status</span>
             <span class="readout-value">
               <span class="status-dot" :class="streamStatus" />
-              {{ streamStatus === 'ready' ? 'synced' : streamStatus === 'loading' ? 'syncing' : 'local' }}
+              {{ streamStatus === 'synced' ? 'synced' : streamStatus === 'loading' ? 'syncing' : 'local' }}
             </span>
           </div>
           <div class="readout-row">
@@ -156,7 +179,13 @@ onMounted(async () => {
 
       <section class="feature-strip" aria-label="精选文章">
         <GlassCard title="精选" code="00" tag="Featured Signal">
-          <button type="button" class="featured-link">
+          <button
+            v-if="featuredEntry"
+            type="button"
+            class="featured-link"
+            :aria-label="`阅读：${featuredEntry.title}`"
+            @click="openEntry(featuredEntry)"
+          >
             <span class="featured-kicker industrial-label">{{ featuredEntry?.date }}</span>
             <span class="featured-title">{{ featuredEntry?.title }}</span>
             <span class="featured-excerpt">{{ featuredEntry?.excerpt }}</span>
@@ -177,7 +206,12 @@ onMounted(async () => {
         <GlassCard title="诗文" code="01" tag="Poetry Stream">
           <ul class="entry-list">
             <li v-for="(entry, index) in poetryEntries" :key="entry.id" class="entry-item">
-              <button type="button" class="entry-link">
+              <button
+                type="button"
+                class="entry-link"
+                :aria-label="`阅读：${entry.title}`"
+                @click="openEntry(entry)"
+              >
                 <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span class="entry-content">
                   <span class="entry-meta">
@@ -200,7 +234,12 @@ onMounted(async () => {
         <GlassCard title="有感" code="02" tag="Reflection Stream">
           <ul class="entry-list">
             <li v-for="(entry, index) in reflectionEntries" :key="entry.id" class="entry-item">
-              <button type="button" class="entry-link">
+              <button
+                type="button"
+                class="entry-link"
+                :aria-label="`阅读：${entry.title}`"
+                @click="openEntry(entry)"
+              >
                 <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span class="entry-content">
                   <span class="entry-meta">
@@ -219,6 +258,29 @@ onMounted(async () => {
         </GlassCard>
       </section>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="activeEntry"
+        class="entry-reader"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="activeEntry.title"
+        @click.self="closeEntry"
+        @keydown.escape="closeEntry"
+      >
+        <article class="entry-reader__panel">
+          <header class="entry-reader__header">
+            <time class="entry-reader__date">{{ activeEntry.date }}</time>
+            <button type="button" class="entry-reader__close" aria-label="关闭" @click="closeEntry">
+              ×
+            </button>
+          </header>
+          <h2 class="entry-reader__title">{{ activeEntry.title }}</h2>
+          <p class="entry-reader__body">{{ activeEntry.content }}</p>
+        </article>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -574,7 +636,7 @@ onMounted(async () => {
   background: var(--color-muted);
 }
 
-.status-dot.ready {
+.status-dot.synced {
   background: var(--color-accent-cyan);
   box-shadow: 0 0 10px var(--color-accent-cyan-dim);
 }
@@ -584,8 +646,80 @@ onMounted(async () => {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-.status-dot.offline {
+.status-dot.local {
   background: var(--color-muted);
+}
+
+.entry-reader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(4, 5, 7, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.entry-reader__panel {
+  width: min(100%, 36rem);
+  max-height: min(80dvh, 32rem);
+  overflow-y: auto;
+  padding: 1.75rem 1.5rem 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+    rgba(12, 14, 18, 0.92);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.entry-reader__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.entry-reader__date {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.entry-reader__close {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-foreground);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.3s var(--ease-mechanical);
+}
+
+.entry-reader__close:hover {
+  border-color: rgba(0, 212, 170, 0.45);
+}
+
+.entry-reader__title {
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  line-height: 1.15;
+  font-weight: 800;
+  color: var(--color-foreground);
+}
+
+.entry-reader__body {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: 2;
+  white-space: pre-line;
+  color: rgba(232, 232, 234, 0.78);
 }
 
 @keyframes pulse {

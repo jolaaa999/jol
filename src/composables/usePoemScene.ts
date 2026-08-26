@@ -160,6 +160,7 @@ export function usePoemScene(
   let pointer = new THREE.Vector2()
   /** requestAnimationFrame 句柄 */
   let rafId = 0
+  let dissolveTimeoutId = 0
   /** 场景时钟 */
   let clock = new THREE.Clock()
 
@@ -649,6 +650,7 @@ export function usePoemScene(
   /** 释放所有 GPU 资源与监听 */
   function dispose(): void {
     cancelAnimationFrame(rafId)
+    clearTimeout(dissolveTimeoutId)
     window.removeEventListener('resize', onResize)
     window.removeEventListener('pointerdown', onPointerDown)
 
@@ -807,7 +809,7 @@ export function usePoemScene(
         }
 
         if (filledCount.value >= totalBlanks.value) {
-          setTimeout(() => startDissolve(), 400)
+          dissolveTimeoutId = window.setTimeout(() => startDissolve(), 400)
         }
       },
     })
@@ -915,7 +917,6 @@ export function usePoemScene(
     if (elapsed >= dissolveDuration) {
       phase.value = 'complete'
       onComplete?.()
-      dispose()
     }
   }
 

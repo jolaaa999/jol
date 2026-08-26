@@ -1,27 +1,29 @@
-import { onMounted, onUnmounted, ref, shallowRef, type Ref } from 'vue'
+import { onMounted, onUnmounted, shallowRef, type Ref } from 'vue'
 import { PhysicsEngine } from './usePhysicsEngine'
 import { useWindField } from './useWindField'
 
-/** Canvas 蒲公英粒子场景 — Verlet 积分 + 风场反馈 */
+/** Canvas 蒲公英粒子场景 — Verlet 积分 + 风场反馈（博客背景装饰） */
 export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
   /** 物理引擎实例 */
   const engine = shallowRef<PhysicsEngine | null>(null)
   /** 风场采样器 */
   const windField = useWindField()
-  /** 指针位置（用于风场扰动） */
-  const pointer = ref<{ x: number; y: number } | null>(null)
   /** requestAnimationFrame 句柄 */
   let rafId = 0
   /** 上一帧时间戳 */
   let lastTime = 0
+  /** 标签页不可见时暂停渲染 */
+  let paused = false
 
-  /** 种子粒子数量 */
-  const SEED_COUNT = 10048
+  /** 背景装饰用种子粒子数量（低于落地页 Three.js 版本） */
+  const SEED_COUNT = 960
   /** 花头粒子索引 */
   const HEAD_ID = 0
 
   /** 初始化蒲公英物理场景（花头 + 种子弹簧） */
   function initScene(width: number, height: number): void {
+    engine.value = null
+
     const eng = new PhysicsEngine({
       gravity: { x: 0, y: 0.04 },
       globalDamping: 0.996,
@@ -86,7 +88,7 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
 
     eng.step(1, (p) => {
       if (p.pinned) return { x: 0, y: 0 }
-      return windField.sampleWithPointer(p.x, p.y, time * 0.001, pointer.value)
+      return windField.sample(p.x, p.y, time * 0.001)
     })
     eng.constrainToBounds(width, height, 20)
 
@@ -159,34 +161,34 @@ export function useDandelionScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     }
 
     render(ctx, w, h, timestamp)
-    rafId = requestAnimationFrame(loop)
-  }
 
-  /** 指针移动 — 更新风场扰动源 */
-  function onPointerMove(e: PointerEvent): void {
-    const canvas = canvasRef.value
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    pointer.value = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+    if (!paused) {
+      rafId = requestAnimationFrame(loop)
     }
   }
 
-  /** 指针离开 — 清除扰动源 */
-  function onPointerLeave(): void {
-    pointer.value = null
+  function startLoop(): void {
+    cancelAnimationFrame(rafId)
+    rafId = requestAnimationFrame(loop)
+  }
+
+  function onVisibilityChange(): void {
+    paused = document.hidden
+    if (paused) {
+      cancelAnimationFrame(rafId)
+    } else {
+      startLoop()
+    }
   }
 
   onMounted(() => {
-    rafId = requestAnimationFrame(loop)
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerleave', onPointerLeave)
+    startLoop()
+    document.addEventListener('visibilitychange', onVisibilityChange)
   })
 
   onUnmounted(() => {
     cancelAnimationFrame(rafId)
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerleave', onPointerLeave)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    engine.value = null
   })
 }

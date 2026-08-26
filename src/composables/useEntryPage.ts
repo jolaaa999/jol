@@ -230,17 +230,23 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     else openMenu()
   }
 
+  function onKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && menuOpen.value) closeMenu()
+  }
+
   onMounted(() => {
     if (!rootRef.value) return
     ctx = gsap.context(() => {
       initMenuClosed()
       playHeroEntrance()
     }, rootRef.value)
+    window.addEventListener('keydown', onKeydown)
   })
 
   onUnmounted(() => {
     menuTimeline?.kill()
     document.body.style.overflow = ''
+    window.removeEventListener('keydown', onKeydown)
     ctx?.revert()
   })
 

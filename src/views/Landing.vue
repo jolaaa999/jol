@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDandelionThreeScene } from '@/composables/useDandelionThreeScene'
 import { preloadUnlockAssets } from '@/utils/unlockPreload'
@@ -37,48 +37,66 @@ onMounted(() => {
   })
 })
 
+/** 页面卸载时取消异步动画，避免对已销毁组件写状态 */
+let cancelled = false
+let waitRafId = 0
+let fadeRafId = 0
+
 /** 等待解锁场景就绪（最长 8s） */
 function waitForUnlockReady(timeoutMs = 8000): Promise<void> {
   if (unlockReady.value) return Promise.resolve()
   return new Promise((resolve) => {
     const start = performance.now()
     const tick = (): void => {
-      if (unlockReady.value || performance.now() - start >= timeoutMs) {
+      if (cancelled || unlockReady.value || performance.now() - start >= timeoutMs) {
         resolve()
         return
       }
-      requestAnimationFrame(tick)
+      waitRafId = requestAnimationFrame(tick)
     }
-    requestAnimationFrame(tick)
+    waitRafId = requestAnimationFrame(tick)
   })
 }
 
 /** 白光峰值后淡出，解锁页从亮光中显现 */
 async function revealUnlockFromLight(): Promise<void> {
+  if (cancelled) return
   await waitForUnlockReady()
+  if (cancelled) return
   lightFade.value = 1
   unlockRevealed.value = true
 
   await new Promise((r) => setTimeout(r, 120))
+  if (cancelled) return
 
   const start = performance.now()
   const duration = 1400
 
   await new Promise<void>((resolve) => {
     const fade = (now: number): void => {
+      if (cancelled) {
+        resolve()
+        return
+      }
       const t = Math.min(1, (now - start) / duration)
       const eased = 1 - (1 - t) ** 3
       lightFade.value = 1 - eased
       if (t < 1) {
-        requestAnimationFrame(fade)
+        fadeRafId = requestAnimationFrame(fade)
       } else {
         dandelionVisible.value = false
         resolve()
       }
     }
-    requestAnimationFrame(fade)
+    fadeRafId = requestAnimationFrame(fade)
   })
 }
+
+onUnmounted(() => {
+  cancelled = true
+  cancelAnimationFrame(waitRafId)
+  cancelAnimationFrame(fadeRafId)
+})
 
 /** 诗文解锁完成后跳转至入口主页 */
 function onUnlockComplete(): void {

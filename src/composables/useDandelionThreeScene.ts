@@ -320,6 +320,8 @@ export function useDandelionThreeScene(
   let headEngineId = 0
   /** requestAnimationFrame 句柄 */
   let rafId = 0
+  /** 吹散阶段延迟切换定时器 */
+  let blowTimeoutId = 0
   /** 上一帧时间戳 */
   let lastTimestamp = 0
   /** 吹散阶段起始时间 */
@@ -856,13 +858,15 @@ export function useDandelionThreeScene(
       }
     }
 
-    setTimeout(() => {
+    blowTimeoutId = window.setTimeout(() => {
       if (phase.value === 'blowing') phase.value = 'spreading'
     }, 120)
   }
 
   /** 主渲染循环 */
   function tick(timestamp: number): void {
+    if (phase.value === 'done') return
+
     if (!lastTimestamp) lastTimestamp = timestamp
     const dt = Math.min(timestamp - lastTimestamp, 32)
     lastTimestamp = timestamp
@@ -1043,7 +1047,19 @@ export function useDandelionThreeScene(
   /** 释放 GPU 资源 */
   function dispose(): void {
     cancelAnimationFrame(rafId)
+    clearTimeout(blowTimeoutId)
     window.removeEventListener('resize', onResize)
+
+    if (scene) {
+      scene.traverse((obj) => {
+        if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+          obj.geometry?.dispose()
+          const mat = obj.material
+          if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+          else mat?.dispose()
+        }
+      })
+    }
 
     if (points) {
       points.geometry.dispose()
@@ -1059,6 +1075,7 @@ export function useDandelionThreeScene(
     }
     glowTexture?.dispose()
     backgroundTexture?.dispose()
+    composer?.dispose()
     renderer?.dispose()
     renderer = null
     scene = null

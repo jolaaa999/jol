@@ -11,6 +11,13 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	if lib.HandleOptions(w, r) {
 		return
 	}
+	if r.Method != http.MethodGet {
+		lib.WriteJSON(w, http.StatusMethodNotAllowed, lib.ErrorResponse{
+			Error:   "method_not_allowed",
+			Message: "only GET is supported",
+		})
+		return
+	}
 
 	lib.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
