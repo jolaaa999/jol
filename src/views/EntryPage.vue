@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { onUnmounted, ref } from 'vue'
+import { inject, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import AmbientShell from '@/components/ui/AmbientShell.vue'
-import GlassCard from '@/components/ui/GlassCard.vue'
 import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
 import { usePageTransition } from '@/composables/usePageTransition'
+import { FLUID_CYCLE_KEY } from '@/composables/fluidGradientContext'
 
 /** 页面根元素 */
 const rootRef = ref<HTMLElement | null>(null)
@@ -14,40 +13,25 @@ const router = useRouter()
 /** 菜单关闭后延迟导航的定时器 */
 let navigateTimeoutId = 0
 
+/** 主标题逐字拆分 */
+const HEADLINE = "Hi, I'm JOL"
+const headlineChars = HEADLINE.split('')
+
 /** 侧边菜单项 */
 const menuItems: EntryMenuItem[] = [
-  { id: 'home', label: '首页', href: '/blog', index: '01' },
-  { id: 'poetry', label: '诗文', href: '/blog#poetry', index: '02' },
-  { id: 'reflections', label: '有感', href: '/blog#reflections', index: '03' },
-  { id: 'contact', label: '联系', href: 'mailto:hello@jol.dev', index: '04' },
-]
-
-/** 快捷入口卡片 */
-const quickLinks = [
-  {
-    code: '01',
-    title: '诗文',
-    tag: 'Poetry Stream',
-    desc: '月色、风场与拓扑 — 以诗记录界面背后的感知。',
-    href: '/blog#poetry',
-  },
-  {
-    code: '02',
-    title: '有感',
-    tag: 'Reflection Stream',
-    desc: '关于克制、物理与暗色留白的短篇笔记。',
-    href: '/blog#reflections',
-  },
+  { id: 'home', label: 'HOME', href: '/blog' },
+  { id: 'reflections', label: 'REFLECTIONS', href: '/blog#reflections' },
+  { id: 'contact', label: 'CONTACT', href: 'mailto:hello@jol.dev' },
 ]
 
 const { menuOpen, isExiting, toggleMenu, closeMenu, playPageExit } = useEntryPage(rootRef)
 const { markFromEntry, beginTransition, endTransition } = usePageTransition()
+const cyclePalette = inject(FLUID_CYCLE_KEY, () => {})
 
-/** 带退场动画的路由跳转 */
 function navigateWithTransition(href: string): void {
   if (isExiting.value) return
 
-  const delay = menuOpen.value ? 420 : 0
+  const delay = menuOpen.value ? 380 : 0
   closeMenu()
 
   if (href.startsWith('mailto:')) {
@@ -72,7 +56,7 @@ function navigateWithTransition(href: string): void {
   }, delay)
 }
 
-/** 导航至目标路径 */
+/** 导航至目标路径（hash 滚动由 router scrollBehavior 统一处理） */
 function navigateTo(href: string): void {
   navigateWithTransition(href)
 }
@@ -88,118 +72,78 @@ function enterBlog(): void {
 </script>
 
 <template>
-  <div
-    ref="rootRef"
-    class="entry"
-    :class="{ 'entry--menu-open': menuOpen, 'entry--exiting': isExiting }"
-  >
-    <AmbientShell />
-
-    <div class="entry__exit-veil" data-exit-veil aria-hidden="true" />
-
-    <header class="entry__header glass-panel" data-entry-header>
-      <div class="entry__header-inner">
-        <div class="entry__brand" data-hero-block>
-          <span class="entry__brand-mark" />
-          <span class="entry__brand-text">JOL</span>
-          <span class="industrial-label entry__brand-sub">personal blog</span>
-        </div>
-
-        <button
-          type="button"
-          class="entry__menu-trigger"
-          data-hero-block
-          :aria-expanded="menuOpen"
-          aria-controls="entry-menu"
-          @click="toggleMenu"
-        >
-          <span class="entry__menu-trigger-label industrial-label">Navigate</span>
-          <span class="entry__menu-icon" aria-hidden="true">+</span>
-        </button>
+  <div ref="rootRef" class="entry" :class="{ 'entry--menu-open': menuOpen, 'entry--exiting': isExiting }">
+    <header class="entry__header">
+      <div class="entry__brand" data-hero-block>
+        <span class="entry__brand-text">jol</span>
+        <span class="entry__brand-dot" />
       </div>
-      <div class="accent-line" />
+
+      <button
+        type="button"
+        class="entry__menu-trigger"
+        data-hero-block
+        :aria-expanded="menuOpen"
+        aria-controls="entry-menu"
+        @click="toggleMenu"
+      >
+        <span>Menu</span>
+        <span class="entry__menu-icon" aria-hidden="true">+</span>
+      </button>
     </header>
 
-    <main class="entry__shell" data-entry-shell>
-      <section class="entry__hero-panel" data-hero-panel aria-labelledby="entry-title">
-        <div class="entry__hero-accent" aria-hidden="true" />
+    <main class="entry__hero">
+      <div class="entry__hero-block-mask">
+        <p class="entry__eyebrow entry__iridescent entry__iridescent--hero" data-hero-block>HELLO, WORLD</p>
+      </div>
 
-        <div class="entry__hero-copy">
-          <p class="entry__eyebrow industrial-label" data-hero-block>Personal Interface Layer</p>
-          <div class="entry__rule" data-hero-line aria-hidden="true" />
-
-          <h1 id="entry-title" class="entry__title" data-hero-block>
-            你好，我是 <span class="entry__title-accent">JOL</span>
-          </h1>
-
-          <p class="entry__bio" data-hero-block>
-            开发者与创作者。在精确工程与流动美学之间，搭建可被再次点亮的数字界面。
-          </p>
-
-          <div class="entry__readout" aria-label="入口状态" data-hero-block>
-            <div class="entry__readout-row">
-              <span class="entry__readout-label">status</span>
-              <span class="entry__readout-value">
-                <span class="entry__status-dot" />
-                ready
-              </span>
-            </div>
-            <div class="entry__readout-row">
-              <span class="entry__readout-label">modules</span>
-              <span class="entry__readout-value">blog / poetry / reflections</span>
-            </div>
-            <div class="entry__readout-row">
-              <span class="entry__readout-label">signal</span>
-              <span class="entry__readout-value entry__readout-value--accent">2026-08-26</span>
-            </div>
-          </div>
-
-          <div class="entry__actions" data-hero-block>
-            <button type="button" class="entry__cta entry__cta--primary" @click="enterBlog">
-              <span class="entry__cta-index">00</span>
-              <span>进入博客</span>
-              <span class="entry__cta-arrow" aria-hidden="true">→</span>
-            </button>
-            <a class="entry__cta entry__cta--ghost" href="mailto:hello@jol.dev">
-              发送邮件联系
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <aside class="entry__aside">
-        <GlassCard
-          v-for="link in quickLinks"
-          :key="link.code"
-          :title="link.title"
-          :code="link.code"
-          :tag="link.tag"
-          class="entry__quick-card"
-          data-hero-panel
+      <h1 class="entry__headline" aria-label="Hi, I'm JOL">
+        <span
+          v-for="(char, i) in headlineChars"
+          :key="`${char}-${i}`"
+          class="entry__char-wrap"
         >
-          <button
-            type="button"
-            class="entry__quick-link"
-            :aria-label="`前往${link.title}`"
-            @click="navigateTo(link.href)"
-          >
-            <p class="entry__quick-desc" data-hero-block>{{ link.desc }}</p>
-            <span class="entry__quick-cta industrial-label" data-hero-block>
-              open stream
-              <span aria-hidden="true">↗</span>
-            </span>
-          </button>
-          <template #footer>
-            <div class="entry__signal-meter" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
-          </template>
-        </GlassCard>
-      </aside>
+          <span class="entry__char entry__iridescent entry__iridescent--hero" data-hero-char>{{ char === ' ' ? '\u00A0' : char }}</span>
+        </span>
+      </h1>
+
+      <div class="entry__hero-block-mask entry__hero-block-mask--bio">
+        <p class="entry__bio entry__iridescent entry__iridescent--hero" data-hero-block>
+          Developer &amp; creator. Building digital experiences that merge
+          technical precision with fluid aesthetics.
+        </p>
+      </div>
+
+      <div class="entry__hero-block-mask entry__hero-block-mask--actions">
+        <div class="entry__actions" data-hero-block>
+        <button type="button" class="entry__cta entry__cta--primary" @click="enterBlog">
+          <svg class="entry__cta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 6h16v12H4V6Z"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linejoin="round"
+            />
+            <path
+              d="m4 7 8 6 8-6"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>进入博客</span>
+          <span class="entry__cta-arrow" aria-hidden="true">→</span>
+        </button>
+
+        <a
+          class="entry__cta entry__cta--ghost"
+          href="mailto:hello@jol.dev"
+        >
+          发送邮件联系
+        </a>
+        </div>
+      </div>
     </main>
 
     <div
@@ -216,67 +160,80 @@ function enterBlog(): void {
       />
 
       <div class="entry__menu-drawer" data-menu-drawer>
+        <!-- 三层右缘对齐、零间隙堆叠，从浏览器侧面连续推出 -->
         <div class="entry__menu-stack">
           <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
           <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
-          <aside class="entry__menu-panel glass-panel" data-menu-panel>
-            <button type="button" class="entry__menu-close" aria-label="关闭菜单" @click="closeMenu">
-              <span class="entry__menu-close-mask" data-menu-text-mask>
-                <span class="entry__menu-close-inner" data-menu-text-inner>
-                  <span>Close</span>
-                  <span aria-hidden="true">×</span>
-                </span>
+          <aside class="entry__menu-panel" data-menu-panel>
+          <button type="button" class="entry__menu-close" aria-label="关闭菜单" @click="closeMenu">
+            <span class="entry__menu-close-mask" data-menu-text-mask>
+              <span class="entry__menu-close-inner" data-menu-text-inner>
+                <span class="entry__iridescent entry__iridescent--menu">Close</span>
+                <span class="entry__iridescent entry__iridescent--menu" aria-hidden="true">×</span>
               </span>
-            </button>
+            </span>
+          </button>
 
-            <nav class="entry__menu-nav" aria-label="站点导航">
-              <a
-                v-for="item in menuItems"
-                :key="item.id"
-                class="entry__menu-link"
-                :href="item.href"
-                @click.prevent="navigateTo(item.href)"
-              >
-                <span class="entry__menu-link-mask" data-menu-text-mask>
-                  <span class="entry__menu-link-inner" data-menu-nav-text>
-                    <span class="entry__menu-link-index">{{ item.index }}</span>
-                    {{ item.label }}
-                  </span>
-                </span>
-              </a>
-            </nav>
-
+          <nav class="entry__menu-nav" aria-label="站点导航">
             <a
-              class="entry__menu-credits"
-              href="https://github.com/jolaaa999/jol"
-              target="_blank"
-              rel="noopener noreferrer"
+              v-for="item in menuItems"
+              :key="item.id"
+              class="entry__menu-link"
+              :href="item.href"
+              @click.prevent="navigateTo(item.href)"
             >
-              <span class="entry__menu-credits-mask" data-menu-text-mask>
-                <span class="entry__menu-credits-inner" data-menu-text-inner>
-                  <span>Credits</span>
-                  <span class="entry__menu-arrow" aria-hidden="true">↗</span>
-                </span>
+              <span class="entry__menu-link-mask" data-menu-text-mask>
+                <span
+                  class="entry__menu-link-inner entry__iridescent entry__iridescent--menu"
+                  data-menu-nav-text
+                >{{ item.label }}</span>
               </span>
             </a>
+          </nav>
 
-            <footer class="entry__menu-footer">
-              <span class="entry__menu-footer-label-mask" data-menu-text-mask>
-                <span class="entry__menu-footer-label industrial-label" data-menu-text-inner>Socials</span>
+          <a
+            class="entry__menu-credits"
+            href="https://github.com/jolaaa999/jol"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span class="entry__menu-credits-mask" data-menu-text-mask>
+              <span class="entry__menu-credits-inner" data-menu-text-inner>
+                <span class="entry__iridescent entry__iridescent--menu">Credits</span>
+                <span class="entry__menu-arrow entry__iridescent entry__iridescent--menu" aria-hidden="true">↗</span>
               </span>
-              <div class="entry__menu-footer-links">
-                <a
-                  class="entry__menu-footer-link"
-                  href="https://github.com/jolaaa999/jol"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <span class="entry__menu-footer-link-mask" data-menu-text-mask>
-                    <span data-menu-text-inner>GitHub</span>
-                  </span>
-                </a>
-              </div>
-            </footer>
+            </span>
+          </a>
+
+          <footer class="entry__menu-footer">
+            <span class="entry__menu-footer-label-mask" data-menu-text-mask>
+              <span
+                class="entry__menu-footer-label entry__iridescent entry__iridescent--menu"
+                data-menu-text-inner
+              >Socials</span>
+            </span>
+            <div class="entry__menu-footer-links">
+              <button
+                type="button"
+                class="entry__menu-footer-link"
+                @click="cyclePalette"
+              >
+                <span class="entry__menu-footer-link-mask" data-menu-text-mask>
+                  <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>切换背景</span>
+                </span>
+              </button>
+              <a
+                class="entry__menu-footer-link"
+                href="https://github.com/jolaaa999/jol"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="entry__menu-footer-link-mask" data-menu-text-mask>
+                  <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>GitHub</span>
+                </span>
+              </a>
+            </div>
+          </footer>
           </aside>
         </div>
       </div>
@@ -289,92 +246,78 @@ function enterBlog(): void {
   position: relative;
   min-height: 100dvh;
   overflow: hidden;
-  color: var(--color-foreground);
+  color: rgba(255, 255, 255, 0.92);
 }
 
-.entry__exit-veil {
-  position: fixed;
+.entry__canvas {
+  position: absolute;
   inset: 0;
-  z-index: 200;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.entry__grain {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   pointer-events: none;
-  opacity: 0;
-  background:
-    linear-gradient(160deg, rgba(8, 9, 11, 0.92), rgba(8, 9, 11, 0.98)),
-    radial-gradient(circle at 70% 20%, rgba(0, 212, 170, 0.08), transparent 42%);
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
 }
 
 .entry__header {
   position: relative;
-  z-index: 20;
-  height: var(--nav-height);
-  border-radius: 0;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-}
-
-.entry__header-inner {
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 100%;
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.75rem);
 }
 
 .entry__brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.625rem;
-}
-
-.entry__brand-mark {
-  width: 6px;
-  height: 6px;
-  background: var(--color-accent);
-  transform: rotate(45deg);
+  gap: 0.45rem;
 }
 
 .entry__brand-text {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: var(--tracking-wide);
-  color: var(--color-foreground);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
 }
 
-.entry__brand-sub {
-  margin-left: 0.35rem;
-  opacity: 0.6;
+.entry__brand-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4da6ff;
+  box-shadow: 0 0 12px rgba(77, 166, 255, 0.8);
 }
 
 .entry__menu-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.22);
-  color: var(--color-foreground);
+  gap: 0.55rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.88);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
   cursor: pointer;
-  transition:
-    border-color 0.35s var(--ease-mechanical),
-    background 0.35s var(--ease-mechanical);
+  transition: opacity 0.25s var(--ease-mechanical);
 }
 
 .entry__menu-trigger:hover {
-  border-color: rgba(0, 212, 170, 0.35);
-  background: rgba(0, 212, 170, 0.06);
-}
-
-.entry__menu-trigger-label {
-  color: var(--color-muted);
+  opacity: 0.72;
 }
 
 .entry__menu-icon {
-  font-family: var(--font-mono);
   font-size: 1rem;
   font-weight: 300;
   line-height: 1;
@@ -385,141 +328,144 @@ function enterBlog(): void {
   transform: rotate(45deg);
 }
 
-.entry__shell {
+.entry__hero {
   position: relative;
   z-index: 5;
-  display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(18rem, 0.88fr);
-  gap: 1rem;
-  max-width: var(--content-max);
-  min-height: calc(100dvh - var(--nav-height));
-  margin: 0 auto;
-  padding: 2rem 1.5rem 3rem;
-}
-
-.entry__hero-panel {
-  position: relative;
-  display: grid;
-  align-content: space-between;
-  min-height: 24rem;
-  padding: clamp(1.5rem, 4vw, 3rem);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.42));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 60px rgba(0, 0, 0, 0.34);
-  overflow: hidden;
-}
-
-.entry__hero-accent {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.18), transparent),
-    linear-gradient(0deg, transparent 72%, rgba(255, 255, 255, 0.06));
-  clip-path: polygon(0 78%, 100% 47%, 100% 62%, 0 93%);
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-.entry__hero-copy {
-  position: relative;
-  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100dvh - 5rem);
+  padding: 2rem clamp(1.5rem, 5vw, 3rem) 4rem;
+  text-align: center;
 }
 
 .entry__eyebrow {
-  margin: 0 0 1rem;
-  color: var(--color-accent-cyan);
-}
-
-.entry__rule {
-  width: 4.5rem;
-  height: 1px;
-  margin-bottom: 1.5rem;
-  background: linear-gradient(90deg, var(--color-accent-cyan), transparent);
-}
-
-.entry__title {
-  max-width: 11em;
-  margin: 0;
-  font-size: clamp(2.25rem, 6vw, 4.5rem);
-  line-height: 0.98;
-  font-weight: 800;
-  letter-spacing: 0;
-  color: #f6f6f2;
-}
-
-.entry__title-accent {
-  color: var(--color-accent-cyan);
-}
-
-.entry__bio {
-  max-width: 34rem;
-  margin: 1.35rem 0 0;
-  font-size: var(--text-base);
-  line-height: 1.9;
-  color: rgba(232, 232, 234, 0.72);
-}
-
-.entry__readout {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-  margin-top: 2.25rem;
-}
-
-.entry__readout-row {
-  min-width: 0;
-  padding: 0.85rem 0.9rem;
-  border-left: 1px solid rgba(0, 212, 170, 0.45);
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.entry__readout-label,
-.entry__readout-value {
-  display: block;
+  margin: 0 0 1.25rem;
   font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
 }
 
-.entry__readout-label {
-  margin-bottom: 0.35rem;
-  font-size: 0.6rem;
-  letter-spacing: 0.16em;
-  color: var(--color-muted);
+.entry__headline {
+  margin: 0 0 1.5rem;
+  font-size: clamp(2.75rem, 8vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
 }
 
-.entry__readout-value {
+.entry__char-wrap {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  line-height: 1.05;
+}
+
+.entry__char {
+  display: inline-block;
+  will-change: transform;
+}
+
+/* 块级 Hero 内容遮罩：配合 yPercent 从顶缘外落入 */
+.entry__hero-block-mask {
+  overflow: hidden;
+}
+
+.entry__hero-block-mask--bio {
+  max-width: 32rem;
+  margin: 0 0 2.25rem;
+}
+
+.entry__hero-block-mask--actions {
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  color: var(--color-foreground);
+  justify-content: center;
 }
 
-.entry__readout-value--accent {
-  color: var(--color-accent);
+/* ── 炫彩渐变文字：与流体背景色板呼应 ── */
+.entry__iridescent {
+  display: inline-block;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
-.entry__status-dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--color-accent-cyan);
-  box-shadow: 0 0 10px var(--color-accent-cyan-dim);
+/* 深色 Hero 背景：高亮流光，偏冷青 / 紫 / 品红 */
+.entry__iridescent--hero {
+  background-image: linear-gradient(
+    115deg,
+    #ffffff 0%,
+    #9ed8ff 10%,
+    #7c8cff 24%,
+    #c084fc 38%,
+    #f0abfc 50%,
+    #22d3ee 64%,
+    #60a5fa 78%,
+    #ffffff 100%
+  );
+  background-size: 280% 100%;
+  animation: entry-iridescent-flow 8s linear infinite;
+}
+
+/* 段落级 Hero 文字保持块级布局，渐变覆盖多行 */
+.entry__eyebrow.entry__iridescent--hero,
+.entry__bio.entry__iridescent--hero {
+  display: block;
+}
+
+/* 浅色菜单面板：饱和深色系，保证白底可读 */
+.entry__iridescent--menu {
+  background-image: linear-gradient(
+    115deg,
+    #1a0a6e 0%,
+    #3218c8 12%,
+    #1a52e8 26%,
+    #7c3aed 40%,
+    #c026d3 54%,
+    #0891b2 68%,
+    #4338ca 82%,
+    #1a0a6e 100%
+  );
+  background-size: 280% 100%;
+  animation: entry-iridescent-flow 6.5s linear infinite;
+}
+
+@keyframes entry-iridescent-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 280% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry__iridescent--hero,
+  .entry__iridescent--menu {
+    animation: none;
+    background-size: 100% 100%;
+    background-position: 0% 50%;
+  }
+}
+
+.entry__bio {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(0.8125rem, 1.6vw, 0.9375rem);
+  font-weight: 300;
+  line-height: 1.75;
 }
 
 .entry__actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  margin-top: 2.25rem;
+  gap: 0.85rem;
 }
 
 .entry__cta {
@@ -527,26 +473,24 @@ function enterBlog(): void {
   align-items: center;
   gap: 0.65rem;
   padding: 0.85rem 1.35rem;
-  border-radius: 2px;
+  border-radius: 999px;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   text-decoration: none;
   cursor: pointer;
   transition:
     transform 0.35s var(--ease-mechanical),
     background 0.35s var(--ease-mechanical),
-    border-color 0.35s var(--ease-mechanical),
-    color 0.35s var(--ease-mechanical);
+    border-color 0.35s var(--ease-mechanical);
 }
 
 .entry__cta--primary {
-  border: 1px solid rgba(0, 212, 170, 0.35);
-  background:
-    linear-gradient(135deg, rgba(0, 212, 170, 0.14), rgba(0, 212, 170, 0.04)),
-    rgba(8, 9, 11, 0.55);
-  color: var(--color-foreground);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(8, 8, 16, 0.38);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  color: rgba(255, 255, 255, 0.92);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 8px 32px rgba(0, 0, 0, 0.28);
@@ -554,30 +498,29 @@ function enterBlog(): void {
 
 .entry__cta--primary:hover {
   transform: translateY(-2px);
-  border-color: rgba(0, 212, 170, 0.55);
-  background:
-    linear-gradient(135deg, rgba(0, 212, 170, 0.2), rgba(0, 212, 170, 0.06)),
-    rgba(8, 9, 11, 0.65);
-}
-
-.entry__cta-index {
-  color: var(--color-accent-cyan);
-  font-size: 0.7rem;
+  background: rgba(12, 12, 22, 0.52);
+  border-color: rgba(255, 255, 255, 0.22);
 }
 
 .entry__cta--ghost {
   border: none;
   background: none;
-  color: var(--color-foreground-dim);
+  color: rgba(255, 255, 255, 0.55);
   padding: 0.35rem 0.75rem;
 }
 
 .entry__cta--ghost:hover {
-  color: var(--color-foreground);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.entry__cta-icon {
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.85;
 }
 
 .entry__cta-arrow {
-  opacity: 0.65;
+  opacity: 0.6;
   transition: transform 0.35s var(--ease-mechanical);
 }
 
@@ -586,94 +529,31 @@ function enterBlog(): void {
   opacity: 1;
 }
 
-.entry__aside {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.entry__quick-card {
-  flex: 1;
-}
-
-.entry__quick-link {
-  display: grid;
-  gap: 1.25rem;
-  width: 100%;
-  min-height: 9.5rem;
-  padding: 1.25rem 1.5rem 1.5rem;
-  color: inherit;
-  text-align: left;
-  background:
-    linear-gradient(150deg, rgba(0, 212, 170, 0.08), transparent 42%),
-    transparent;
-  border: 0;
-  cursor: pointer;
-  transition: background 0.35s var(--ease-mechanical);
-}
-
-.entry__quick-link:hover {
-  background:
-    linear-gradient(150deg, rgba(0, 212, 170, 0.14), transparent 48%),
-    rgba(255, 255, 255, 0.02);
-}
-
-.entry__quick-desc {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.75;
-  color: rgba(232, 232, 234, 0.68);
-}
-
-.entry__quick-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--color-accent-cyan);
-}
-
-.entry__signal-meter {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0.4rem;
-}
-
-.entry__signal-meter span {
-  height: 2px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.entry__signal-meter span:nth-child(2),
-.entry__signal-meter span:nth-child(4) {
-  background: rgba(0, 212, 170, 0.72);
-}
-
-/* ── 工业风侧栏菜单 ── */
+/* ── 多层侧栏菜单 ── */
 .entry__menu {
   position: fixed;
   inset: 0;
   z-index: 100;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .entry__menu--open {
   pointer-events: auto;
+  visibility: visible;
 }
 
 .entry__menu-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(4, 6, 10, 0.62);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(4, 6, 14, 0.42);
   opacity: 0;
-  will-change: opacity;
 }
 
 .entry__menu-drawer {
-  --menu-layer-1-w: clamp(1.5rem, 2.8vw, 2.25rem);
-  --menu-layer-2-w: clamp(2.25rem, 4.2vw, 3.5rem);
+  /* 抽屉总宽 = 两层色带 + 内容面板，锚定在视口右侧 */
+  --menu-layer-1-w: clamp(1.75rem, 3.2vw, 2.75rem);
+  --menu-layer-2-w: clamp(2.75rem, 5vw, 4.25rem);
   --menu-panel-w: clamp(17rem, 34vw, 24rem);
   position: absolute;
   top: 0;
@@ -688,7 +568,6 @@ function enterBlog(): void {
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: hidden;
 }
 
 .entry__menu-layer,
@@ -696,23 +575,24 @@ function enterBlog(): void {
   position: absolute;
   top: 0;
   height: 100%;
+  /* 统一以浏览器右缘为变换原点，层间无位移缝隙 */
   transform-origin: right center;
   backface-visibility: hidden;
-  transform: scaleX(0);
-  will-change: transform;
+  will-change: transform, clip-path;
 }
 
+/* 黑色贴浏览器右缘 → 紫 → 白，绝对定位保证零间隙 */
 .entry__menu-layer--1 {
   right: 0;
   width: var(--menu-layer-1-w);
-  background: #0a0e14;
+  background: #0a0e1a;
   z-index: 3;
 }
 
 .entry__menu-layer--2 {
   right: var(--menu-layer-1-w);
   width: var(--menu-layer-2-w);
-  background: linear-gradient(180deg, rgba(0, 212, 170, 0.55) 0%, rgba(0, 140, 110, 0.35) 100%);
+  background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
   z-index: 2;
 }
 
@@ -721,10 +601,8 @@ function enterBlog(): void {
   width: var(--menu-panel-w);
   z-index: 1;
   padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
-  border-radius: 0;
-  border-top: none;
-  border-right: none;
-  border-bottom: none;
+  background: #fafafa;
+  color: #0a0a0b;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
@@ -752,6 +630,7 @@ function enterBlog(): void {
 .entry__menu-credits-inner,
 .entry__menu-footer-label,
 .entry__menu-footer-link-mask [data-menu-text-inner] {
+  /* GSAP 入场前 fallback：内层藏在遮罩顶缘外 */
   transform: translateY(-110%);
   will-change: transform;
 }
@@ -767,14 +646,16 @@ function enterBlog(): void {
   align-items: center;
   gap: 0.45rem;
   padding: 0.5rem 1rem;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.28);
-  font-family: var(--font-mono);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.09);
+  font-family: var(--font-sans);
   font-size: 0.8125rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-foreground);
+  will-change: transform;
+}
+
+.entry__menu-close-inner .entry__iridescent--menu {
+  display: inline-block;
 }
 
 .entry__menu-nav {
@@ -794,29 +675,23 @@ function enterBlog(): void {
   display: block;
   overflow: hidden;
   height: 1.06em;
-  font-size: clamp(2.25rem, 5.2vw, 3.25rem);
+  font-size: clamp(2.5rem, 5.8vw, 3.65rem);
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.06;
 }
 
 .entry__menu-link-inner {
-  display: flex;
-  align-items: baseline;
-  gap: 0.65rem;
-  transition: color 0.28s var(--ease-mechanical);
+  display: block;
+  transition: filter 0.28s var(--ease-mechanical);
 }
 
-.entry__menu-link-index {
-  font-family: var(--font-mono);
-  font-size: 0.42em;
-  font-weight: 400;
-  letter-spacing: 0.1em;
-  color: var(--color-accent-cyan);
+.entry__menu-link-inner.entry__iridescent--menu {
+  display: block;
 }
 
 .entry__menu-link:hover .entry__menu-link-inner {
-  color: var(--color-accent-cyan);
+  filter: brightness(1.12) saturate(1.15);
 }
 
 .entry__menu-credits {
@@ -825,7 +700,6 @@ function enterBlog(): void {
   text-decoration: none;
   font-family: var(--font-mono);
   font-size: 0.875rem;
-  color: var(--color-foreground-dim);
 }
 
 .entry__menu-credits-mask {
@@ -841,13 +715,17 @@ function enterBlog(): void {
   gap: 0.35rem;
 }
 
+.entry__menu-credits-inner .entry__iridescent--menu {
+  display: inline-block;
+}
+
 .entry__menu-arrow {
   font-size: 0.75rem;
 }
 
 .entry__menu-footer {
   padding-top: 1.35rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .entry__menu-footer-label-mask {
@@ -859,6 +737,10 @@ function enterBlog(): void {
 
 .entry__menu-footer-label {
   display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .entry__menu-footer-links {
@@ -874,7 +756,6 @@ function enterBlog(): void {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   text-decoration: none;
-  color: var(--color-foreground-dim);
   cursor: pointer;
 }
 
@@ -887,49 +768,17 @@ function enterBlog(): void {
 
 .entry__menu-footer-link-mask span {
   display: block;
-  transition: color 0.25s var(--ease-mechanical);
+  transition: filter 0.25s var(--ease-mechanical);
 }
 
 .entry__menu-footer-link:hover span {
-  color: var(--color-accent-cyan);
+  filter: brightness(1.1) saturate(1.12);
 }
 
-@media (max-width: 960px) {
-  .entry__shell {
-    grid-template-columns: 1fr;
-  }
-
-  .entry__hero-panel {
-    min-height: 22rem;
-  }
-}
-
-@media (max-width: 620px) {
-  .entry__shell {
-    padding: 1rem 0.85rem 2rem;
-  }
-
-  .entry__hero-panel {
-    padding: 1.35rem;
-  }
-
-  .entry__readout {
-    grid-template-columns: 1fr;
-    margin-top: 2rem;
-  }
-
-  .entry__actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .entry__cta--primary {
-    justify-content: center;
-  }
-
+@media (max-width: 640px) {
   .entry__menu-drawer {
-    --menu-layer-1-w: 1.15rem;
-    --menu-layer-2-w: 1.75rem;
+    --menu-layer-1-w: 1.25rem;
+    --menu-layer-2-w: 2rem;
     --menu-panel-w: min(88vw, 20rem);
   }
 }

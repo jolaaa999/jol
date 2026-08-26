@@ -2,7 +2,6 @@
 import { onMounted, ref } from 'vue'
 import gsap from 'gsap'
 import NavBar from './NavBar.vue'
-import ParticleCanvas from '@/components/canvas/ParticleCanvas.vue'
 import { usePageTransition } from '@/composables/usePageTransition'
 
 const shellRef = ref<HTMLElement | null>(null)
@@ -27,7 +26,6 @@ onMounted(() => {
 
 <template>
   <div ref="shellRef" class="shell">
-    <ParticleCanvas />
     <NavBar />
     <main class="main">
       <slot>

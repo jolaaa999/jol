@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
+import FluidBackdrop from '@/components/ui/FluidBackdrop.vue'
 import MechanicalNav from '@/components/MechanicalNav.vue'
 
-/** Vue Router 实例 */
 const router = useRouter()
-/** 当前路由 */
 const route = useRoute()
 
-/** 沉浸式页面不显示浮动机械导航 */
-const showMechanicalNav = computed(
-  () => route.name !== 'landing' && route.name !== 'entry',
+/** 入口页与博客共用流体背景 */
+const showFluidBackdrop = computed(
+  () => route.name === 'entry' || route.name === 'blog',
 )
 
-/** 处理机械导航跳转（hash 滚动由 router scrollBehavior 统一处理） */
+const showMechanicalNav = computed(
+  () => route.name === 'blog',
+)
+
 function onNavigate(to: string): void {
   const hashIdx = to.indexOf('#')
   if (hashIdx === -1) {
@@ -27,6 +29,21 @@ function onNavigate(to: string): void {
 </script>
 
 <template>
-  <RouterView />
+  <FluidBackdrop v-if="showFluidBackdrop" />
+  <div class="app-stage" :class="{ 'app-stage--fluid': showFluidBackdrop }">
+    <RouterView />
+  </div>
   <MechanicalNav v-if="showMechanicalNav" @navigate="onNavigate" />
 </template>
+
+<style scoped>
+.app-stage {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+}
+
+.app-stage--fluid {
+  color: rgba(255, 255, 255, 0.92);
+}
+</style>

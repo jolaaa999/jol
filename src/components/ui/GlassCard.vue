@@ -1,11 +1,8 @@
 <script setup lang="ts">
 /** 毛玻璃卡片组件属性定义 */
 defineProps<{
-  /** 卡片标题 */
   title: string
-  /** 区块编号，如 01 */
   code?: string
-  /** 副标题 / 分类标签 */
   tag?: string
 }>()
 </script>
@@ -35,12 +32,14 @@ defineProps<{
 .glass-card {
   display: flex;
   flex-direction: column;
-  background: var(--glass-endfield-bg);
-  backdrop-filter: blur(var(--glass-endfield-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-endfield-blur)) saturate(150%);
-  border: 1px solid var(--glass-endfield-border);
+  background: rgba(8, 8, 16, 0.38);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 2px;
-  box-shadow: var(--glass-endfield-shadow);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.28);
   overflow: hidden;
 }
 
@@ -64,7 +63,7 @@ defineProps<{
   font-size: var(--text-xs);
   font-weight: 400;
   letter-spacing: var(--tracking-wide);
-  color: var(--color-accent-cyan);
+  color: #9ed8ff;
   opacity: 0.85;
 }
 
@@ -72,8 +71,8 @@ defineProps<{
   margin: 0;
   font-size: var(--text-lg);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--color-foreground);
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .glass-card__tag {
@@ -82,7 +81,7 @@ defineProps<{
   font-weight: 400;
   letter-spacing: var(--tracking-wide);
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.38);
   white-space: nowrap;
 }
 
@@ -93,6 +92,6 @@ defineProps<{
 
 .glass-card__footer {
   padding: 0.75rem 1.5rem 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 </style>

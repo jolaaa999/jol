@@ -40,6 +40,54 @@
     box-shadow: var(--shadow-glass);
   }
 
+  .glass-fluid {
+    background: rgba(8, 8, 16, 0.38);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 8px 32px rgba(0, 0, 0, 0.28);
+  }
+
+  .iridescent {
+    display: inline-block;
+    background-repeat: repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  .iridescent--hero {
+    background-image: linear-gradient(
+      115deg,
+      #ffffff 0%,
+      #9ed8ff 10%,
+      #7c8cff 24%,
+      #c084fc 38%,
+      #f0abfc 50%,
+      #22d3ee 64%,
+      #60a5fa 78%,
+      #ffffff 100%
+    );
+    background-size: 280% 100%;
+    animation: iridescent-flow 8s linear infinite;
+  }
+
+  .iridescent--soft {
+    background-image: linear-gradient(
+      115deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      #b8e4ff 20%,
+      #a5b4fc 40%,
+      #67e8f9 60%,
+      rgba(255, 255, 255, 0.9) 100%
+    );
+    background-size: 240% 100%;
+    animation: iridescent-flow 10s linear infinite;
+  }
+
   .industrial-label {
     font-family: var(--font-mono);
     font-size: var(--text-xs);
@@ -64,5 +112,24 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+@keyframes iridescent-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  100% {
+    background-position: 280% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iridescent--hero,
+  .iridescent--soft {
+    animation: none;
+    background-size: 100% 100%;
+    background-position: 0% 50%;
   }
 }

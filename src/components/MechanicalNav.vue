@@ -17,7 +17,6 @@ const emit = defineEmits<{
 /** 机械导航子节点配置 */
 const NODES: MechanicalNavNode[] = [
   { id: 'home', label: '首页', to: '/blog' },
-  { id: 'poetry', label: '诗文', to: '/blog#poetry' },
   { id: 'reflections', label: '有感', to: '/blog#reflections' },
 ]
 

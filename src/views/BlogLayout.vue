@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import gsap from 'gsap'
-import AmbientShell from '@/components/ui/AmbientShell.vue'
 import GlassCard from '@/components/ui/GlassCard.vue'
 import { usePageTransition } from '@/composables/usePageTransition'
 
@@ -13,31 +12,6 @@ export interface BlogEntry {
   content: string
   date: string
 }
-
-/** 诗文条目列表（含本地占位数据） */
-const poetryEntries = ref<BlogEntry[]>([
-  {
-    id: 'p-001',
-    title: '静夜',
-    excerpt: '月色落在窗棂上，像一段未完成的代码，等待被编译成梦。',
-    content: '月色落在窗棂上，\n像一段未完成的代码，\n等待被编译成梦。',
-    date: '2026-05-12',
-  },
-  {
-    id: 'p-002',
-    title: '风过草原',
-    excerpt: '蒲公英解体的那一秒，整片草原都在悄悄重写自己的坐标系。',
-    content: '蒲公英解体的那一秒，\n整片草原都在悄悄重写自己的坐标系。',
-    date: '2026-04-28',
-  },
-  {
-    id: 'p-003',
-    title: '拓扑',
-    excerpt: '节点与边构成世界，我们在毛玻璃后面，阅读自己的连接度。',
-    content: '节点与边构成世界，\n我们在毛玻璃后面，\n阅读自己的连接度。',
-    date: '2026-03-15',
-  },
-])
 
 /** 有感/随笔条目列表（含本地占位数据） */
 const reflectionEntries = ref<BlogEntry[]>([
@@ -69,14 +43,13 @@ const streamStatus = ref<'loading' | 'synced' | 'local'>('loading')
 /** 当前展开阅读的文章 */
 const activeEntry = ref<BlogEntry | null>(null)
 
-/** 精选展示条目（优先有感，否则诗文） */
-const featuredEntry = computed(() => reflectionEntries.value[0] ?? poetryEntries.value[0])
+/** 精选展示条目 */
+const featuredEntry = computed(() => reflectionEntries.value[0])
 /** 全部条目数量 */
-const totalEntries = computed(() => poetryEntries.value.length + reflectionEntries.value.length)
+const totalEntries = computed(() => reflectionEntries.value.length)
 /** 最新发布日期 */
 const latestDate = computed(() => {
-  /** 全部条目日期，降序排列后取最新 */
-  const dates = [...poetryEntries.value, ...reflectionEntries.value].map((entry) => entry.date).sort().reverse()
+  const dates = reflectionEntries.value.map((entry) => entry.date).sort().reverse()
   return dates[0] ?? '--'
 })
 
@@ -151,27 +124,17 @@ onMounted(async () => {
   }
 
   try {
-    /** 并行请求诗文与文章接口 */
-    const [poetryRes, postsRes] = await Promise.all([
-      fetch('/api/poetry'),
-      fetch('/api/posts'),
-    ])
-    if (!poetryRes.ok || !postsRes.ok) throw new Error('offline')
+    const postsRes = await fetch('/api/posts')
+    if (!postsRes.ok) throw new Error('offline')
 
-    /** 解析诗文与文章 JSON 响应 */
-    const poetryData = (await poetryRes.json()) as ArticleResponse
     const postsData = (await postsRes.json()) as ArticleResponse
 
-    let synced = false
-    if (poetryData.data?.length) {
-      poetryEntries.value = poetryData.data.map(toEntry)
-      synced = true
-    }
     if (postsData.data?.length) {
       reflectionEntries.value = postsData.data.map(toEntry)
-      synced = true
+      streamStatus.value = 'synced'
+    } else {
+      streamStatus.value = 'local'
     }
-    streamStatus.value = synced ? 'synced' : 'local'
   } catch {
     streamStatus.value = 'local'
   }
@@ -180,17 +143,15 @@ onMounted(async () => {
 
 <template>
   <main class="blog-layout">
-    <AmbientShell />
-
     <div ref="blogShellRef" class="blog-shell">
-      <section class="hero-panel" data-blog-panel aria-labelledby="blog-title">
+      <section class="hero-panel glass-fluid" data-blog-panel aria-labelledby="blog-title">
         <div class="hero-copy">
-          <p class="eyebrow industrial-label">Journal Operating Layer</p>
+          <p class="eyebrow iridescent iridescent--hero">Journal Operating Layer</p>
           <h1 id="blog-title" class="hero-title">
             在光和噪声之间，记录一些正在成形的想法。
           </h1>
           <p class="hero-text">
-            这里收纳诗文、界面笔记和一些关于感知的短篇。它不追求喧哗，更像一张夜间工作台，留下可被再次点亮的线索。
+            这里收纳界面笔记和一些关于感知的短篇。它不追求喧哗，更像一张夜间工作台，留下可被再次点亮的线索。
           </p>
         </div>
 
@@ -208,7 +169,7 @@ onMounted(async () => {
           </div>
           <div class="readout-row">
             <span class="readout-label">latest</span>
-            <span class="readout-value">{{ latestDate }}</span>
+            <span class="readout-value readout-value--accent">{{ latestDate }}</span>
           </div>
         </div>
       </section>
@@ -222,8 +183,8 @@ onMounted(async () => {
             :aria-label="`阅读：${featuredEntry.title}`"
             @click="openEntry(featuredEntry)"
           >
-            <span class="featured-kicker industrial-label">{{ featuredEntry?.date }}</span>
-            <span class="featured-title">{{ featuredEntry?.title }}</span>
+            <span class="featured-kicker">{{ featuredEntry?.date }}</span>
+            <span class="featured-title iridescent iridescent--soft">{{ featuredEntry?.title }}</span>
             <span class="featured-excerpt">{{ featuredEntry?.excerpt }}</span>
           </button>
           <template #footer>
@@ -238,36 +199,8 @@ onMounted(async () => {
         </GlassCard>
       </section>
 
-      <section id="poetry" class="entry-section poetry-section" data-blog-panel>
-        <GlassCard title="诗文" code="01" tag="Poetry Stream">
-          <ul class="entry-list">
-            <li v-for="(entry, index) in poetryEntries" :key="entry.id" class="entry-item">
-              <button
-                type="button"
-                class="entry-link"
-                :aria-label="`阅读：${entry.title}`"
-                @click="openEntry(entry)"
-              >
-                <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
-                <span class="entry-content">
-                  <span class="entry-meta">
-                    <time class="entry-date">{{ entry.date }}</time>
-                    <span class="entry-id">{{ entry.id }}</span>
-                  </span>
-                  <span class="entry-title">{{ entry.title }}</span>
-                  <span class="entry-excerpt">{{ entry.excerpt }}</span>
-                </span>
-              </button>
-            </li>
-          </ul>
-          <template #footer>
-            <span class="entry-count">{{ poetryEntries.length }} entries</span>
-          </template>
-        </GlassCard>
-      </section>
-
       <section id="reflections" class="entry-section reflections-section" data-blog-panel>
-        <GlassCard title="有感" code="02" tag="Reflection Stream">
+        <GlassCard title="有感" code="01" tag="Reflection Stream">
           <ul class="entry-list">
             <li v-for="(entry, index) in reflectionEntries" :key="entry.id" class="entry-item">
               <button
@@ -334,7 +267,7 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 0.95fr);
   grid-template-areas:
     'hero feature'
-    'poetry reflections';
+    'reflections reflections';
   gap: 1rem;
   max-width: var(--content-max);
   min-height: calc(100dvh - var(--nav-height));
@@ -349,44 +282,7 @@ onMounted(async () => {
   align-content: space-between;
   min-height: 24rem;
   padding: clamp(1.5rem, 4vw, 3rem);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.42));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 18px 60px rgba(0, 0, 0, 0.34);
   overflow: hidden;
-}
-
-.hero-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.18), transparent),
-    linear-gradient(0deg, transparent 72%, rgba(255, 255, 255, 0.06));
-  clip-path: polygon(0 78%, 100% 47%, 100% 62%, 0 93%);
-  opacity: 0.7;
-}
-
-.hero-panel::after {
-  content: '';
-  position: absolute;
-  right: -8rem;
-  bottom: -7rem;
-  width: 26rem;
-  height: 16rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transform: rotate(-18deg);
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(255, 255, 255, 0.035) 0,
-      rgba(255, 255, 255, 0.035) 1px,
-      transparent 1px,
-      transparent 18px
-    );
 }
 
 .hero-copy,
@@ -396,8 +292,13 @@ onMounted(async () => {
 }
 
 .eyebrow {
+  display: block;
   margin: 0 0 1.5rem;
-  color: var(--color-accent-cyan);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
 }
 
 .hero-title {
@@ -406,16 +307,18 @@ onMounted(async () => {
   font-size: clamp(2.25rem, 6vw, 5.25rem);
   line-height: 0.98;
   font-weight: 800;
-  letter-spacing: 0;
-  color: #f6f6f2;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .hero-text {
   max-width: 38rem;
   margin: 1.5rem 0 0;
-  font-size: var(--text-base);
-  line-height: 1.9;
-  color: rgba(232, 232, 234, 0.72);
+  font-family: var(--font-mono);
+  font-size: clamp(0.8125rem, 1.6vw, 0.9375rem);
+  font-weight: 300;
+  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .hero-readout {
@@ -428,8 +331,8 @@ onMounted(async () => {
 .readout-row {
   min-width: 0;
   padding: 0.85rem 0.9rem;
-  border-left: 1px solid rgba(0, 212, 170, 0.45);
-  background: rgba(0, 0, 0, 0.2);
+  border-left: 1px solid rgba(158, 216, 255, 0.35);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 .readout-label,
@@ -443,7 +346,7 @@ onMounted(async () => {
   margin-bottom: 0.35rem;
   font-size: 0.6rem;
   letter-spacing: 0.16em;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .readout-value {
@@ -453,7 +356,11 @@ onMounted(async () => {
   min-width: 0;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
-  color: var(--color-foreground);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.readout-value--accent {
+  color: #f0abfc;
 }
 
 .feature-strip {
@@ -474,7 +381,7 @@ onMounted(async () => {
   color: inherit;
   text-align: left;
   background:
-    linear-gradient(150deg, rgba(0, 212, 170, 0.11), transparent 42%),
+    linear-gradient(150deg, rgba(124, 140, 255, 0.12), transparent 42%),
     transparent;
   border: 0;
   cursor: pointer;
@@ -482,20 +389,25 @@ onMounted(async () => {
 
 .featured-link:hover .featured-title,
 .entry-link:hover .entry-title {
-  color: var(--color-accent-cyan);
+  filter: brightness(1.15) saturate(1.12);
 }
 
 .featured-kicker {
-  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: #9ed8ff;
 }
 
 .featured-title {
+  display: block;
   max-width: 9em;
   font-size: clamp(1.75rem, 3vw, 2.8rem);
   line-height: 1.02;
   font-weight: 800;
-  letter-spacing: 0;
-  transition: color 0.35s var(--ease-mechanical);
+  letter-spacing: -0.02em;
+  transition: filter 0.35s var(--ease-mechanical);
 }
 
 .featured-excerpt {
@@ -503,7 +415,7 @@ onMounted(async () => {
   max-width: 30rem;
   font-size: var(--text-base);
   line-height: 1.8;
-  color: var(--color-foreground-dim);
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .signal-meter {
@@ -514,16 +426,12 @@ onMounted(async () => {
 
 .signal-meter span {
   height: 2px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .signal-meter span:nth-child(2),
 .signal-meter span:nth-child(4) {
-  background: rgba(0, 212, 170, 0.72);
-}
-
-.poetry-section {
-  grid-area: poetry;
+  background: rgba(158, 216, 255, 0.65);
 }
 
 .reflections-section {
@@ -565,7 +473,7 @@ onMounted(async () => {
 }
 
 .entry-link:hover {
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(255, 255, 255, 0.04);
   transform: translateX(2px);
 }
 
@@ -573,7 +481,7 @@ onMounted(async () => {
   font-family: var(--font-mono);
   font-size: 0.72rem;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.26);
+  color: rgba(255, 255, 255, 0.24);
 }
 
 .entry-content,
@@ -596,12 +504,12 @@ onMounted(async () => {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.1em;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
 }
 
 .entry-id {
-  color: rgba(255, 255, 255, 0.24);
+  color: rgba(255, 255, 255, 0.2);
 }
 
 .entry-title {
@@ -610,14 +518,14 @@ onMounted(async () => {
   line-height: 1.35;
   font-weight: 750;
   letter-spacing: 0;
-  color: var(--color-foreground);
-  transition: color 0.35s var(--ease-mechanical);
+  color: rgba(255, 255, 255, 0.92);
+  transition: filter 0.35s var(--ease-mechanical);
 }
 
 .entry-excerpt {
   font-size: var(--text-sm);
   line-height: 1.7;
-  color: rgba(232, 232, 234, 0.62);
+  color: rgba(255, 255, 255, 0.52);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -628,7 +536,7 @@ onMounted(async () => {
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: var(--tracking-wide);
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
 }
 
@@ -637,16 +545,16 @@ onMounted(async () => {
   height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--color-muted);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .status-dot.synced {
-  background: var(--color-accent-cyan);
-  box-shadow: 0 0 10px var(--color-accent-cyan-dim);
+  background: #9ed8ff;
+  box-shadow: 0 0 10px rgba(158, 216, 255, 0.45);
 }
 
 .status-dot.loading {
-  background: var(--color-accent);
+  background: #c084fc;
   animation: pulse 1.2s ease-in-out infinite;
 }
 
@@ -661,9 +569,9 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  background: rgba(4, 5, 7, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(4, 6, 14, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .entry-reader__panel {
@@ -671,10 +579,10 @@ onMounted(async () => {
   max-height: min(80dvh, 32rem);
   overflow-y: auto;
   padding: 1.75rem 1.5rem 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(12, 14, 18, 0.92);
+    rgba(8, 8, 16, 0.88);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
 }
 
@@ -690,7 +598,7 @@ onMounted(async () => {
   font-size: 0.65rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .entry-reader__close {
@@ -699,7 +607,7 @@ onMounted(async () => {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 50%;
   background: transparent;
-  color: var(--color-foreground);
+  color: rgba(255, 255, 255, 0.88);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
@@ -707,7 +615,7 @@ onMounted(async () => {
 }
 
 .entry-reader__close:hover {
-  border-color: rgba(0, 212, 170, 0.45);
+  border-color: rgba(158, 216, 255, 0.45);
 }
 
 .entry-reader__title {
@@ -715,7 +623,7 @@ onMounted(async () => {
   font-size: clamp(1.5rem, 4vw, 2.25rem);
   line-height: 1.15;
   font-weight: 800;
-  color: var(--color-foreground);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .entry-reader__body {
@@ -723,7 +631,7 @@ onMounted(async () => {
   font-size: var(--text-base);
   line-height: 2;
   white-space: pre-line;
-  color: rgba(232, 232, 234, 0.78);
+  color: rgba(255, 255, 255, 0.68);
 }
 
 @keyframes pulse {
@@ -742,7 +650,6 @@ onMounted(async () => {
     grid-template-areas:
       'hero'
       'feature'
-      'poetry'
       'reflections';
   }
 
