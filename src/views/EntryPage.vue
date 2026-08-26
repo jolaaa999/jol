@@ -634,18 +634,18 @@ function scrollToWorks(): void {
   position: absolute;
   top: 0;
   height: 100%;
-  /* 统一以浏览器右缘为变换原点，层间无位移缝隙 */
-  transform-origin: right center;
   backface-visibility: hidden;
-  will-change: transform, clip-path;
+  will-change: transform;
 }
 
-/* 黑色贴浏览器右缘 → 紫 → 白，绝对定位保证零间隙 */
+/* 黑（贴右缘，最先滑出）→ 紫 → 白 */
 .entry__menu-layer--1 {
   right: 0;
   width: var(--menu-layer-1-w);
   background: #0a0e1a;
   z-index: 3;
+  transform: scaleX(0);
+  transform-origin: right center;
 }
 
 .entry__menu-layer--2 {
@@ -653,6 +653,8 @@ function scrollToWorks(): void {
   width: var(--menu-layer-2-w);
   background: linear-gradient(180deg, #3218c8 0%, #1a52e8 55%, #2a18a8 100%);
   z-index: 2;
+  transform: scaleX(0);
+  transform-origin: right center;
 }
 
 .entry__menu-panel {
@@ -665,6 +667,8 @@ function scrollToWorks(): void {
   display: flex;
   flex-direction: column;
   pointer-events: auto;
+  /* 从右缘揭开（左侧裁切），与色带递推方向一致，且不压扁文字 */
+  clip-path: inset(0 0 0 100%);
 }
 
 .entry__menu-close {

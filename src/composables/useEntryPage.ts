@@ -14,14 +14,19 @@ export interface EntryMenuItem {
   href: string
 }
 
-/** 白色面板 clip-path：从左向右裁切，从浏览器右缘向左露出 */
-const MENU_PANEL_CLIP_CLOSED = 'inset(0 0 0 100%)'
-const MENU_PANEL_CLIP_OPEN = 'inset(0 0 0 0)'
+/** 色带变换原点：贴浏览器右缘向外展开 */
+const MENU_ORIGIN = 'right center'
+/** 层间递推间隔（秒）— 右缘黑 → 紫 → 白 */
+const LAYER_STAGGER = 0.15
+/** 单层展开时长 */
+const LAYER_DURATION = 0.56
+/** 开合缓动 */
+const MENU_EASE = 'power3.inOut'
+/** 白面板 clip：从左侧裁切 100% = 收起于右缘；0 = 完全展开 */
+const PANEL_CLIP_CLOSED = 'inset(0 0 0 100%)'
+const PANEL_CLIP_OPEN = 'inset(0 0 0 0)'
 
-/** 菜单开合缓动：与 --ease-damped 一致的机械阻尼感 */
-const MENU_EASE = 'power2.inOut'
-
-/** 入口页 GSAP 编排：Hero 逐字坠落 + 三层递进覆盖菜单 */
+/** 入口页 GSAP：Hero 入场 + 三色递推菜单 */
 export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
   const menuOpen = ref(false)
   const isAnimating = ref(false)
@@ -34,7 +39,6 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     return window.matchMedia('(prefers-reduced-motion: reduce)').matches
   }
 
-  /** Hero 区入场：标题逐字从上方掉入遮罩，块级内容紧随其后（仅位移，不透明度保持 1） */
   function playHeroEntrance(): void {
     if (!rootRef.value) return
 
@@ -46,7 +50,6 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       return
     }
 
-    /* 渐变字不可配合 opacity:0，仅用 yPercent 藏在遮罩顶外 */
     gsap.set(chars, { yPercent: -110, opacity: 1, force3D: true })
     gsap.set(blocks, { yPercent: -110, opacity: 1, force3D: true })
 
@@ -71,7 +74,6 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       )
   }
 
-  /** 页面退场：Hero 与顶栏上浮淡出 */
   function playPageExit(onComplete: () => void): void {
     if (!rootRef.value || isExiting.value) return
 
@@ -86,37 +88,34 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     const works = rootRef.value.querySelector('.works')
     const header = rootRef.value.querySelector('.entry__header')
 
-    gsap.timeline({
-      defaults: { ease: 'power3.inOut' },
-      onComplete,
-    })
+    gsap
+      .timeline({
+        defaults: { ease: 'power3.inOut' },
+        onComplete,
+      })
       .to(hero, { y: -22, opacity: 0, duration: 0.5, force3D: true }, 0)
       .to(works, { y: -16, opacity: 0, duration: 0.48, force3D: true }, 0.04)
       .to(header, { y: -12, opacity: 0, duration: 0.42, force3D: true }, 0.06)
   }
 
-  /** 获取菜单三层 DOM 与文本遮罩节点 */
   function getMenuLayers(root: HTMLElement) {
     return {
       layer1: root.querySelector('[data-menu-layer="1"]'),
       layer2: root.querySelector('[data-menu-layer="2"]'),
       panel: root.querySelector('[data-menu-panel]'),
       backdrop: root.querySelector('[data-menu-backdrop]'),
-      /** 导航主项：HOME / POETRY 等，优先错落展开 */
       navTextEls: root.querySelectorAll('[data-menu-nav-text]'),
-      /** 其余菜单文本：Close / Credits / Footer */
       menuTextEls: root.querySelectorAll('[data-menu-text-inner]'),
     }
   }
 
-  /** 重置全部菜单内层文本为遮罩顶外隐藏 */
   function resetMenuTextHidden(root: HTMLElement): void {
     const { navTextEls, menuTextEls } = getMenuLayers(root)
     setMaskedTextHidden(navTextEls)
     setMaskedTextHidden(menuTextEls)
   }
 
-  /** 菜单层初始：色带 scaleX 收拢于右缘，白面板 clip 隐藏 */
+  /** 收拢态：色带 scaleX=0，白面板从右缘 clip 收起 */
   function initMenuClosed(): void {
     if (!rootRef.value) return
 
@@ -124,90 +123,117 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
 
     gsap.set([layer1, layer2], {
       scaleX: 0,
-      transformOrigin: 'right center',
+      transformOrigin: MENU_ORIGIN,
       force3D: true,
     })
-    gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
+    gsap.set(panel, { clipPath: PANEL_CLIP_CLOSED })
     gsap.set(backdrop, { opacity: 0 })
     resetMenuTextHidden(rootRef.value)
   }
 
-  /** 菜单打开：黑 → 紫 → 白，从浏览器右缘连续向左展开（无缝隙） */
+  /** 打开：最右黑带最先 → 紫带 → 白面板揭开 → 文字错落入场 */
   function openMenu(): void {
     if (!rootRef.value || menuOpen.value || isAnimating.value) return
+
+    const reduced = prefersReducedMotion()
+    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } =
+      getMenuLayers(rootRef.value)
+
+    menuTimeline?.kill()
+
+    gsap.set([layer1, layer2], {
+      scaleX: 0,
+      transformOrigin: MENU_ORIGIN,
+      force3D: true,
+    })
+    gsap.set(panel, { clipPath: PANEL_CLIP_CLOSED })
+    gsap.set(backdrop, { opacity: 0 })
+    resetMenuTextHidden(rootRef.value)
 
     menuOpen.value = true
     isAnimating.value = true
     document.body.style.overflow = 'hidden'
 
-    const reduced = prefersReducedMotion()
-    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } = getMenuLayers(rootRef.value)
-
-    menuTimeline?.kill()
-    menuTimeline = gsap.timeline({
-      onComplete: () => {
-        isAnimating.value = false
-      },
-    })
+    const allText = [...navTextEls, ...menuTextEls]
 
     if (reduced) {
-      gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: 'right center' })
-      gsap.set(panel, { clipPath: MENU_PANEL_CLIP_OPEN })
+      gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: MENU_ORIGIN })
+      gsap.set(panel, { clipPath: PANEL_CLIP_OPEN })
       gsap.set(backdrop, { opacity: 1 })
-      gsap.set([...navTextEls, ...menuTextEls], { yPercent: 0 })
+      gsap.set(allText, { yPercent: 0 })
       isAnimating.value = false
       return
     }
 
-    gsap.set([layer1, layer2], {
-      scaleX: 0,
-      transformOrigin: 'right center',
-      force3D: true,
+    menuTimeline = gsap.timeline({
+      onComplete: () => {
+        gsap.set(allText, { yPercent: 0 })
+        isAnimating.value = false
+      },
     })
-    gsap.set(panel, { clipPath: MENU_PANEL_CLIP_CLOSED })
-    gsap.set(backdrop, { opacity: 0 })
-    resetMenuTextHidden(rootRef.value)
 
-    menuTimeline
-      .to(backdrop, { opacity: 1, duration: 0.75, ease: 'power2.out' }, 0)
-      .to(
-        layer1,
-        { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
-        0,
-      )
-      .to(
-        layer2,
-        { scaleX: 1, duration: 0.52, ease: MENU_EASE, force3D: true },
-        0.09,
-      )
-      .to(
-        panel,
-        { clipPath: MENU_PANEL_CLIP_OPEN, duration: 0.62, ease: MENU_EASE },
-        0.18,
-      )
+    menuTimeline.to(backdrop, { opacity: 1, duration: 0.7, ease: 'power2.out' }, 0)
 
-    playStaggeredMaskedTextReveal(menuTimeline, navTextEls, {
-      position: 0.4,
-      stagger: STAGGERED_MASKED_TEXT_DEFAULTS.stagger,
-      duration: STAGGERED_MASKED_TEXT_DEFAULTS.duration,
-      ease: STAGGERED_MASKED_TEXT_DEFAULTS.ease,
-    })
-    playStaggeredMaskedTextReveal(menuTimeline, menuTextEls, {
-      position: '-=0.38',
-      stagger: 0.07,
-      duration: 0.68,
-      ease: 'expo.out',
-    })
+    /* ① 右缘黑色最先展开 */
+    menuTimeline.to(
+      layer1,
+      { scaleX: 1, duration: LAYER_DURATION, ease: MENU_EASE, force3D: true },
+      0,
+    )
+
+    /* ② 紫色中间带 */
+    menuTimeline.to(
+      layer2,
+      {
+        scaleX: 1,
+        duration: LAYER_DURATION + 0.04,
+        ease: MENU_EASE,
+        force3D: true,
+      },
+      LAYER_STAGGER,
+    )
+
+    /* ③ 白色面板：从右缘 clip 揭开（视觉等同 scaleX，不压扁字） */
+    menuTimeline.to(
+      panel,
+      {
+        clipPath: PANEL_CLIP_OPEN,
+        duration: LAYER_DURATION + 0.1,
+        ease: MENU_EASE,
+      },
+      LAYER_STAGGER * 2,
+    )
+
+    const textAt = LAYER_STAGGER * 2 + LAYER_DURATION * 0.42
+
+    if (navTextEls.length) {
+      playStaggeredMaskedTextReveal(menuTimeline, navTextEls, {
+        position: textAt,
+        stagger: STAGGERED_MASKED_TEXT_DEFAULTS.stagger,
+        duration: STAGGERED_MASKED_TEXT_DEFAULTS.duration,
+        ease: STAGGERED_MASKED_TEXT_DEFAULTS.ease,
+      })
+    }
+
+    if (menuTextEls.length) {
+      playStaggeredMaskedTextReveal(menuTimeline, menuTextEls, {
+        position: textAt + 0.1,
+        stagger: 0.07,
+        duration: 0.64,
+        ease: 'expo.out',
+      })
+    }
   }
 
-  /** 菜单关闭：文字收回 → 白 → 紫 → 黑，逆序贴右缘收回 */
+  /** 关闭：文字收回 → 白 → 紫 → 黑 */
   function closeMenu(): void {
     if (!rootRef.value || !menuOpen.value || isAnimating.value) return
 
     isAnimating.value = true
 
     const reduced = prefersReducedMotion()
-    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } = getMenuLayers(rootRef.value)
+    const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } =
+      getMenuLayers(rootRef.value)
 
     menuTimeline?.kill()
 
@@ -219,7 +245,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       return
     }
 
-    const allMenuTextEls = [...navTextEls, ...menuTextEls]
+    const allText = [...navTextEls, ...menuTextEls]
 
     menuTimeline = gsap.timeline({
       onComplete: () => {
@@ -230,24 +256,27 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       },
     })
 
-    playStaggeredMaskedTextHide(menuTimeline, allMenuTextEls, { position: 0 })
+    if (allText.length) {
+      playStaggeredMaskedTextHide(menuTimeline, allText, { position: 0 })
+    }
+
     menuTimeline
       .to(
         panel,
-        { clipPath: MENU_PANEL_CLIP_CLOSED, duration: 0.48, ease: MENU_EASE },
-        0.18,
+        { clipPath: PANEL_CLIP_CLOSED, duration: 0.48, ease: MENU_EASE },
+        0.12,
       )
       .to(
         layer2,
         { scaleX: 0, duration: 0.46, ease: MENU_EASE, force3D: true },
-        '-=0.34',
+        0.12 + LAYER_STAGGER * 0.7,
       )
       .to(
         layer1,
         { scaleX: 0, duration: 0.44, ease: MENU_EASE, force3D: true },
-        '-=0.34',
+        0.12 + LAYER_STAGGER * 1.35,
       )
-      .to(backdrop, { opacity: 0, duration: 0.48, ease: 'power2.in' }, '-=0.36')
+      .to(backdrop, { opacity: 0, duration: 0.5, ease: 'power2.in' }, 0.22)
   }
 
   function toggleMenu(): void {
