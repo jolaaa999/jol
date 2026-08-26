@@ -3,6 +3,7 @@ import { inject, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
 import { usePageTransition } from '@/composables/usePageTransition'
+import WorksShowcase from '@/components/works/WorksShowcase.vue'
 import { FLUID_CYCLE_KEY } from '@/composables/fluidGradientContext'
 
 /** 页面根元素 */
@@ -20,6 +21,7 @@ const headlineChars = HEADLINE.split('')
 /** 侧边菜单项 */
 const menuItems: EntryMenuItem[] = [
   { id: 'home', label: 'HOME', href: '/blog' },
+  { id: 'works', label: 'WORKS', href: '#works' },
   { id: 'reflections', label: 'REFLECTIONS', href: '/blog#reflections' },
   { id: 'contact', label: 'CONTACT', href: 'mailto:hello@jol.dev' },
 ]
@@ -36,6 +38,14 @@ function navigateWithTransition(href: string): void {
 
   if (href.startsWith('mailto:')) {
     window.location.href = href
+    return
+  }
+
+  if (href.startsWith('#')) {
+    clearTimeout(navigateTimeoutId)
+    navigateTimeoutId = window.setTimeout(() => {
+      document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, delay)
     return
   }
 
@@ -68,6 +78,11 @@ onUnmounted(() => {
 /** 主 CTA：进入博客 */
 function enterBlog(): void {
   navigateWithTransition('/blog')
+}
+
+/** 滚动至作品区 */
+function scrollToWorks(): void {
+  navigateWithTransition('#works')
 }
 </script>
 
@@ -136,6 +151,20 @@ function enterBlog(): void {
           <span class="entry__cta-arrow" aria-hidden="true">→</span>
         </button>
 
+        <button type="button" class="entry__cta entry__cta--secondary" @click="scrollToWorks">
+          <svg class="entry__cta-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 7h16M4 12h10M4 17h14"
+              stroke="currentColor"
+              stroke-width="1.4"
+              stroke-linecap="round"
+            />
+            <circle cx="18" cy="17" r="2.5" stroke="currentColor" stroke-width="1.4" />
+          </svg>
+          <span>进入作品</span>
+          <span class="entry__cta-arrow entry__cta-arrow--down" aria-hidden="true">↓</span>
+        </button>
+
         <a
           class="entry__cta entry__cta--ghost"
           href="mailto:hello@jol.dev"
@@ -145,6 +174,8 @@ function enterBlog(): void {
         </div>
       </div>
     </main>
+
+    <WorksShowcase />
 
     <div
       id="entry-menu"
@@ -245,7 +276,7 @@ function enterBlog(): void {
 .entry {
   position: relative;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow-x: hidden;
   color: rgba(255, 255, 255, 0.92);
 }
 
@@ -463,9 +494,37 @@ function enterBlog(): void {
 
 .entry__actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.85rem;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.entry__cta--secondary {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  color: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.entry__cta--secondary:hover {
+  transform: translateY(-2px);
+  border-color: rgba(158, 216, 255, 0.35);
+  background: rgba(124, 140, 255, 0.1);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.entry__cta-arrow--down {
+  transition: transform 0.35s var(--ease-mechanical);
+}
+
+.entry__cta--secondary:hover .entry__cta-arrow--down {
+  transform: translateY(3px);
+  opacity: 1;
 }
 
 .entry__cta {
@@ -776,6 +835,18 @@ function enterBlog(): void {
 }
 
 @media (max-width: 640px) {
+  .entry__actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 18rem;
+  }
+
+  .entry__cta--primary,
+  .entry__cta--secondary {
+    width: 100%;
+    justify-content: center;
+  }
+
   .entry__menu-drawer {
     --menu-layer-1-w: 1.25rem;
     --menu-layer-2-w: 2rem;

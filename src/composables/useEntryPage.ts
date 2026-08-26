@@ -83,6 +83,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     }
 
     const hero = rootRef.value.querySelector('.entry__hero')
+    const works = rootRef.value.querySelector('.works')
     const header = rootRef.value.querySelector('.entry__header')
 
     gsap.timeline({
@@ -90,7 +91,8 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       onComplete,
     })
       .to(hero, { y: -22, opacity: 0, duration: 0.5, force3D: true }, 0)
-      .to(header, { y: -12, opacity: 0, duration: 0.42, force3D: true }, 0.04)
+      .to(works, { y: -16, opacity: 0, duration: 0.48, force3D: true }, 0.04)
+      .to(header, { y: -12, opacity: 0, duration: 0.42, force3D: true }, 0.06)
   }
 
   /** 获取菜单三层 DOM 与文本遮罩节点 */
