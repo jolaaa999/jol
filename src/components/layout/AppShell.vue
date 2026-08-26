@@ -1,11 +1,32 @@
 <script setup lang="ts">
-/** 应用外壳布局：粒子背景 + 导航栏 + 主内容插槽 */
+import { onMounted, ref } from 'vue'
+import gsap from 'gsap'
 import NavBar from './NavBar.vue'
 import ParticleCanvas from '@/components/canvas/ParticleCanvas.vue'
+import { usePageTransition } from '@/composables/usePageTransition'
+
+const shellRef = ref<HTMLElement | null>(null)
+const { isFromEntry } = usePageTransition()
+
+onMounted(() => {
+  if (!isFromEntry() || !shellRef.value) return
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduced) return
+
+  const nav = shellRef.value.querySelector('.nav')
+  if (!nav) return
+
+  gsap.fromTo(
+    nav,
+    { y: -12, opacity: 0 },
+    { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out', delay: 0.08 },
+  )
+})
 </script>
 
 <template>
-  <div class="shell">
+  <div ref="shellRef" class="shell">
     <ParticleCanvas />
     <NavBar />
     <main class="main">

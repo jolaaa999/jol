@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import gsap from 'gsap'
+import AmbientShell from '@/components/ui/AmbientShell.vue'
 import GlassCard from '@/components/ui/GlassCard.vue'
+import { usePageTransition } from '@/composables/usePageTransition'
 
 /** 博客条目数据结构 */
 export interface BlogEntry {
@@ -111,8 +114,42 @@ function closeEntry(): void {
   activeEntry.value = null
 }
 
+const blogShellRef = ref<HTMLElement | null>(null)
+const { consumeFromEntry, endTransition } = usePageTransition()
+
+/** 从入口页进入时播放错落入场 */
+function playEnterFromEntry(): void {
+  if (!blogShellRef.value) return
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduced) {
+    endTransition()
+    return
+  }
+
+  const panels = blogShellRef.value.querySelectorAll('[data-blog-panel]')
+
+  gsap.fromTo(
+    panels,
+    { y: 22, opacity: 0 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: 0.72,
+      stagger: 0.09,
+      ease: 'power3.out',
+      clearProps: 'transform',
+      onComplete: endTransition,
+    },
+  )
+}
+
 /** 挂载后并行拉取诗文与文章 API，失败则保持离线占位数据 */
 onMounted(async () => {
+  if (consumeFromEntry()) {
+    playEnterFromEntry()
+  }
+
   try {
     /** 并行请求诗文与文章接口 */
     const [poetryRes, postsRes] = await Promise.all([
@@ -143,11 +180,10 @@ onMounted(async () => {
 
 <template>
   <main class="blog-layout">
-    <div class="ambient-grid" aria-hidden="true" />
-    <div class="ambient-lines" aria-hidden="true" />
+    <AmbientShell />
 
-    <div class="blog-shell">
-      <section class="hero-panel" aria-labelledby="blog-title">
+    <div ref="blogShellRef" class="blog-shell">
+      <section class="hero-panel" data-blog-panel aria-labelledby="blog-title">
         <div class="hero-copy">
           <p class="eyebrow industrial-label">Journal Operating Layer</p>
           <h1 id="blog-title" class="hero-title">
@@ -177,7 +213,7 @@ onMounted(async () => {
         </div>
       </section>
 
-      <section class="feature-strip" aria-label="精选文章">
+      <section class="feature-strip" data-blog-panel aria-label="精选文章">
         <GlassCard title="精选" code="00" tag="Featured Signal">
           <button
             v-if="featuredEntry"
@@ -202,7 +238,7 @@ onMounted(async () => {
         </GlassCard>
       </section>
 
-      <section id="poetry" class="entry-section poetry-section">
+      <section id="poetry" class="entry-section poetry-section" data-blog-panel>
         <GlassCard title="诗文" code="01" tag="Poetry Stream">
           <ul class="entry-list">
             <li v-for="(entry, index) in poetryEntries" :key="entry.id" class="entry-item">
@@ -230,7 +266,7 @@ onMounted(async () => {
         </GlassCard>
       </section>
 
-      <section id="reflections" class="entry-section reflections-section">
+      <section id="reflections" class="entry-section reflections-section" data-blog-panel>
         <GlassCard title="有感" code="02" tag="Reflection Stream">
           <ul class="entry-list">
             <li v-for="(entry, index) in reflectionEntries" :key="entry.id" class="entry-item">
@@ -289,38 +325,6 @@ onMounted(async () => {
   position: relative;
   min-height: calc(100dvh - var(--nav-height));
   overflow: hidden;
-  background:
-    linear-gradient(115deg, rgba(0, 212, 170, 0.08), transparent 26%),
-    linear-gradient(245deg, rgba(255, 107, 44, 0.06), transparent 32%),
-    #08090b;
-}
-
-.ambient-grid,
-.ambient-lines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.ambient-grid {
-  opacity: 0.72;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: linear-gradient(to bottom, black 0%, transparent 82%);
-}
-
-.ambient-lines {
-  opacity: 0.58;
-  background:
-    repeating-linear-gradient(
-      115deg,
-      transparent 0,
-      transparent 56px,
-      rgba(255, 255, 255, 0.035) 57px,
-      transparent 58px
-    );
 }
 
 .blog-shell {
