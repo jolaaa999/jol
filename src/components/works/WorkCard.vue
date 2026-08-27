@@ -252,6 +252,18 @@ function langTint(lang: string): string {
   -webkit-line-clamp: 2;
 }
 
+.work-card--default .work-card__body {
+  padding: 1.2rem 1.35rem 1.15rem;
+}
+
+.work-card--default .work-card__title {
+  font-size: clamp(1.25rem, 2.4vw, 1.55rem);
+}
+
+.work-card--default .work-card__desc {
+  -webkit-line-clamp: 3;
+}
+
 .work-card--wide .work-card__body {
   padding: 1.35rem 1.5rem 1.25rem;
 }

@@ -10,37 +10,106 @@ const { works, status } = useGithubWorks()
 
 const workCount = computed(() => works.value.length)
 
-/** 仅按简介长度分配网格占位，不改变卡片内部纵向结构 */
+/** Bento 网格：按内容分配 4 / 6 / 8 列，保留适度留白，避免大面积空洞 */
+const GRID_COLS = 12
+/** 行末允许保留的留白列数（约 1/4 宽），超出才扩展末卡 */
+const MAX_ROW_GAP = 3
 const DESC_COMPACT_MAX = 44
 const DESC_WIDE_MIN = 88
 const DESC_FEATURED_MIN = 120
+const DESC_TALL_MIN = 96
 
-interface CardLayout {
-  variant: 'compact' | 'default' | 'wide' | 'featured'
-  cellClass: string
+type CardVariant = 'compact' | 'default' | 'wide' | 'featured'
+
+interface PackedLayout {
+  variant: CardVariant
+  colSpan: number
+  rowSpan: number
+  colSpanMd: number
 }
 
-function resolveCardLayout(index: number, work: WorkProject): CardLayout {
+function toMdSpan(colSpan: number): number {
+  return Math.max(3, Math.min(6, Math.round((colSpan / GRID_COLS) * 6)))
+}
+
+function preferredLayout(index: number, work: WorkProject): PackedLayout {
   const descLen = (work.description ?? '').trim().length
 
   if (index === 0 && descLen >= DESC_FEATURED_MIN) {
-    return { variant: 'featured', cellClass: 'works__cell--featured' }
+    return { variant: 'featured', colSpan: 8, rowSpan: 2, colSpanMd: 6 }
   }
 
   if (descLen <= DESC_COMPACT_MAX) {
-    return { variant: 'compact', cellClass: 'works__cell--compact' }
+    return { variant: 'compact', colSpan: 4, rowSpan: 1, colSpanMd: 3 }
   }
 
   if (descLen >= DESC_WIDE_MIN) {
-    return { variant: 'wide', cellClass: 'works__cell--wide' }
+    return {
+      variant: 'wide',
+      colSpan: 8,
+      rowSpan: descLen >= DESC_TALL_MIN ? 2 : 1,
+      colSpanMd: 6,
+    }
   }
 
-  return { variant: 'default', cellClass: '' }
+  return { variant: 'default', colSpan: 6, rowSpan: 1, colSpanMd: 4 }
 }
 
-const workLayouts = computed(() =>
-  works.value.map((work, index) => resolveCardLayout(index, work)),
-)
+/** 行末适度吸收留白：保留 MAX_ROW_GAP 列呼吸感，仅消除过大空洞 */
+function packWorkLayouts(works: WorkProject[]): PackedLayout[] {
+  const packed: PackedLayout[] = []
+  let rowFill = 0
+  let rowIndices: number[] = []
+
+  const finalizeRow = (): void => {
+    const remaining = GRID_COLS - rowFill
+    if (remaining > MAX_ROW_GAP && rowIndices.length > 0) {
+      const last = packed[rowIndices[rowIndices.length - 1]!]!
+      last.colSpan += remaining - MAX_ROW_GAP
+      last.colSpanMd = toMdSpan(last.colSpan)
+      if (last.colSpan >= 8 && last.variant !== 'featured') {
+        last.variant = 'wide'
+      } else if (last.colSpan >= 6 && last.variant === 'compact') {
+        last.variant = 'default'
+      }
+    }
+    rowFill = 0
+    rowIndices = []
+  }
+
+  for (let i = 0; i < works.length; i++) {
+    const layout = { ...preferredLayout(i, works[i]!) }
+
+    if (rowFill + layout.colSpan > GRID_COLS) {
+      finalizeRow()
+    }
+
+    packed.push(layout)
+    rowIndices.push(packed.length - 1)
+    rowFill += layout.colSpan
+
+    const next = i < works.length - 1 ? preferredLayout(i + 1, works[i + 1]!) : null
+    const nextFits = next !== null && rowFill + next.colSpan <= GRID_COLS
+
+    if (rowFill === GRID_COLS || !nextFits) {
+      finalizeRow()
+    }
+  }
+
+  if (rowIndices.length) finalizeRow()
+
+  return packed
+}
+
+const workLayouts = computed(() => packWorkLayouts(works.value))
+
+function workCardStyle(layout: PackedLayout): Record<string, string | number> {
+  return {
+    '--work-col-span': layout.colSpan,
+    '--work-col-span-md': layout.colSpanMd,
+    '--work-row-span': layout.rowSpan,
+  }
+}
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -143,7 +212,7 @@ onMounted(() => {
         :key="work.id"
         :work="work"
         :variant="workLayouts[index]!.variant"
-        :class="workLayouts[index]!.cellClass"
+        :style="workCardStyle(workLayouts[index]!)"
       />
     </div>
 
@@ -274,23 +343,15 @@ onMounted(() => {
 .works__mosaic {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-flow: dense;
   grid-auto-rows: auto;
   gap: 0.75rem;
   align-items: start;
 }
 
-.works__mosaic > :deep(.works__cell--featured) {
-  grid-column: span 8;
-  grid-row: span 2;
-}
-
-.works__mosaic > :deep(.works__cell--wide) {
-  grid-column: span 8;
-}
-
-.works__mosaic > :deep(.works__cell--compact),
-.works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
-  grid-column: span 4;
+.works__mosaic > :deep(.work-card) {
+  grid-column: span var(--work-col-span, 4);
+  grid-row: span var(--work-row-span, 1);
 }
 
 .works__mosaic--loading {
@@ -374,15 +435,9 @@ onMounted(() => {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
-  .works__mosaic > :deep(.works__cell--featured),
-  .works__mosaic > :deep(.works__cell--wide) {
-    grid-column: span 6;
-    grid-row: span 1;
-  }
-
-  .works__mosaic > :deep(.works__cell--compact),
-  .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
-    grid-column: span 3;
+  .works__mosaic > :deep(.work-card) {
+    grid-column: span var(--work-col-span-md, 3);
+    grid-row: auto;
   }
 
   .works__skeleton--featured,
