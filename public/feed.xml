@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+<title>JOL Blog</title>
+<link>https://jol.vercel.app/blog</link>
+<description>Reflections on design, animation, and engineering.</description>
+<language>zh-CN</language>
+<item>
+<title>关于克制</title>
+<link>https://jol.vercel.app/blog/post/r-001</link>
+<guid>https://jol.vercel.app/blog/post/r-001</guid>
+</item>
+</channel>
+</rss>

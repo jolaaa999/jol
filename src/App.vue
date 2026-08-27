@@ -3,17 +3,26 @@ import { computed } from 'vue'
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import FluidBackdrop from '@/components/ui/FluidBackdrop.vue'
 import MechanicalNav from '@/components/MechanicalNav.vue'
+import CommandPalette from '@/components/ui/CommandPalette.vue'
+import { useTheme } from '@/composables/useTheme'
+import { SITE } from '@/data/site'
+import { useSeo } from '@/composables/useSeo'
 
 const router = useRouter()
 const route = useRoute()
+const { initTheme } = useTheme()
 
-/** 入口页与博客共用流体背景 */
-const showFluidBackdrop = computed(
-  () => route.name === 'entry' || route.name === 'blog',
+initTheme()
+useSeo()
+
+const fluidRoutes = new Set(['entry', 'blog', 'blog-post', 'blog-tag'])
+
+const showFluidBackdrop = computed(() =>
+  route.name != null && fluidRoutes.has(route.name as string),
 )
 
-const showMechanicalNav = computed(
-  () => route.name === 'blog',
+const showMechanicalNav = computed(() =>
+  route.name === 'blog' || route.name === 'blog-post' || route.name === 'blog-tag',
 )
 
 function onNavigate(to: string): void {
@@ -34,6 +43,15 @@ function onNavigate(to: string): void {
     <RouterView />
   </div>
   <MechanicalNav v-if="showMechanicalNav" @navigate="onNavigate" />
+  <CommandPalette />
+
+  <component
+    :is="'script'"
+    v-if="SITE.umami.websiteId && SITE.umami.src"
+    defer
+    :src="SITE.umami.src"
+    :data-website-id="SITE.umami.websiteId"
+  />
 </template>
 
 <style scoped>

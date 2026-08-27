@@ -24,6 +24,16 @@ const router = createRouter({
           name: 'blog',
           component: () => import('@/views/BlogLayout.vue'),
         },
+        {
+          path: 'post/:id',
+          name: 'blog-post',
+          component: () => import('@/views/ArticleView.vue'),
+        },
+        {
+          path: 'tag/:tag',
+          name: 'blog-tag',
+          component: () => import('@/views/TagArchiveView.vue'),
+        },
       ],
     },
     /* 蒲公英落地页与诗词解锁 — 暂时隐藏，保留文件供后续启用 */

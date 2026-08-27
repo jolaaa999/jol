@@ -91,6 +91,10 @@ defineProps<{
 }
 
 .glass-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 0.75rem 1.5rem 1rem;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }

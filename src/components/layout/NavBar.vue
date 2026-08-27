@@ -2,6 +2,8 @@
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGsapNav, type NavSegment } from '@/composables/useGsapNav'
+import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import { useCommandPalette } from '@/composables/useCommandPalette'
 
 const navRef = ref<HTMLElement | null>(null)
 const indicatorRef = ref<HTMLElement | null>(null)
@@ -9,11 +11,13 @@ const indicatorRef = ref<HTMLElement | null>(null)
 const segments: NavSegment[] = [
   { id: 'home', label: '首页', href: '/blog' },
   { id: 'reflections', label: '有感', href: '/blog#reflections' },
+  { id: 'about', label: '关于', href: '/entry#about' },
 ]
 
 const { animateIndicator, hoverSegment } = useGsapNav(navRef, segments)
 const router = useRouter()
 const route = useRoute()
+const { show: showCommandPalette } = useCommandPalette()
 
 function isSegmentActive(seg: NavSegment): boolean {
   const hashIdx = seg.href.indexOf('#')
@@ -58,17 +62,13 @@ watch(() => route.fullPath, () => {
 <template>
   <header ref="navRef" class="nav">
     <div class="nav-inner">
-      <div data-nav-brand class="nav-brand">
+      <RouterLink to="/entry" class="nav-brand" data-nav-brand>
         <span class="nav-brand-text">jol</span>
         <span class="nav-brand-dot" />
-      </div>
+      </RouterLink>
 
       <nav class="nav-segments" aria-label="主导航">
-        <div
-          ref="indicatorRef"
-          data-nav-indicator
-          class="nav-indicator"
-        />
+        <div ref="indicatorRef" data-nav-indicator class="nav-indicator" />
         <button
           v-for="(seg, i) in segments"
           :key="seg.id"
@@ -84,6 +84,14 @@ watch(() => route.fullPath, () => {
           <span class="segment-label">{{ seg.label }}</span>
         </button>
       </nav>
+
+      <div class="nav-actions">
+        <button type="button" class="nav-search" aria-label="搜索 (Ctrl+K)" @click="showCommandPalette">
+          <span>Search</span>
+          <kbd>⌘K</kbd>
+        </button>
+        <ThemeToggle />
+      </div>
     </div>
   </header>
 </template>
@@ -102,6 +110,7 @@ watch(() => route.fullPath, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   height: 100%;
   max-width: var(--content-max);
   margin: 0 auto;
@@ -112,6 +121,7 @@ watch(() => route.fullPath, () => {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  text-decoration: none;
 }
 
 .nav-brand-text {
@@ -176,5 +186,38 @@ watch(() => route.fullPath, () => {
 
 .nav-segment.is-active .segment-index {
   color: #9ed8ff;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nav-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.nav-search kbd {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.55rem;
+}
+
+@media (max-width: 720px) {
+  .nav-search span:first-child {
+    display: none;
+  }
 }
 </style>

@@ -19,6 +19,7 @@ type Article struct {
 	Title     string    `json:"title"`
 	Category  Category  `json:"category"`
 	Content   string    `json:"content"`
+	Tags      []string  `json:"tags"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -27,6 +28,11 @@ type ListResponse struct {
 	Data     []Article `json:"data"`
 	Total    int       `json:"total"`
 	Category Category  `json:"category"`
+}
+
+// DetailResponse 单篇文章响应
+type DetailResponse struct {
+	Data Article `json:"data"`
 }
 
 // ErrorResponse 错误响应
@@ -61,30 +67,44 @@ var mockArticles = []Article{
 		ID:        "r-001",
 		Title:     "关于克制",
 		Category:  CategoryReflection,
-		Content:   "好的界面像好的诗——每个元素都有存在的理由，其余皆是噪声。",
+		Content:   "## 噪声与信号\n\n好的界面像好的诗——每个元素都有存在的理由，其余皆是噪声。\n\n## 留白的价值\n\n暗色背景不是空虚，是留给内容的负空间。",
+		Tags:      []string{"design", "philosophy"},
 		CreatedAt: time.Date(2026, 6, 1, 10, 0, 0, 0, time.UTC),
 	},
 	{
 		ID:        "r-002",
 		Title:     "物理与感知",
 		Category:  CategoryReflection,
-		Content:   "Verlet 积分教会我：平滑的动画不是插值出来的，而是被力推导出来的。",
+		Content:   "## 力的推导\n\nVerlet 积分教会我：平滑的动画不是插值出来的，而是被力推导出来的。\n\n```typescript\nvelocity += force * dt\nposition += velocity * dt\n```\n\n## 感知连续性\n\n人眼对加速度变化更敏感。",
+		Tags:      []string{"animation", "physics", "typescript"},
 		CreatedAt: time.Date(2026, 5, 20, 16, 45, 0, 0, time.UTC),
 	},
 	{
 		ID:        "r-003",
 		Title:     "终末地的灰",
 		Category:  CategoryReflection,
-		Content:   "暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。",
+		Content:   "## 工业灰\n\n暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。\n\n## 毛玻璃层次\n\nbackdrop-filter 与细边框叠加，构成可读的玻璃层次。",
+		Tags:      []string{"design", "ui"},
 		CreatedAt: time.Date(2026, 5, 8, 11, 20, 0, 0, time.UTC),
 	},
 	{
 		ID:        "r-004",
 		Title:     "基建完成",
 		Category:  CategoryReflection,
-		Content:   "Vue3 + Go Serverless 同源部署脚手架已就绪。",
+		Content:   "## 脚手架就绪\n\nVue3 + Go Serverless 同源部署脚手架已就绪。\n\n## 下一步\n\n独立文章页、RSS、搜索与评论系统。",
+		Tags:      []string{"engineering", "vue"},
 		CreatedAt: time.Date(2026, 6, 17, 8, 0, 0, 0, time.UTC),
 	},
+}
+
+// ArticleByID 按 ID 查找文章
+func ArticleByID(id string) (Article, bool) {
+	for _, a := range mockArticles {
+		if a.ID == id {
+			return a, true
+		}
+	}
+	return Article{}, false
 }
 
 // ArticlesByCategory 按分类筛选文章（返回副本，避免外部修改）
@@ -119,4 +139,31 @@ func ServeArticleList(w http.ResponseWriter, r *http.Request, category Category)
 		Total:    len(articles),
 		Category: category,
 	})
+}
+
+// ServeArticleDetail 处理单篇文章 GET 请求
+func ServeArticleDetail(w http.ResponseWriter, r *http.Request, id string) {
+	SetCORS(w)
+	if HandleOptions(w, r) {
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		WriteJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
+			Error:   "method_not_allowed",
+			Message: "only GET is supported",
+		})
+		return
+	}
+
+	article, ok := ArticleByID(id)
+	if !ok {
+		WriteJSON(w, http.StatusNotFound, ErrorResponse{
+			Error:   "not_found",
+			Message: "article not found",
+		})
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, DetailResponse{Data: article})
 }

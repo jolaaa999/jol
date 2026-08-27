@@ -1,96 +1,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import gsap from 'gsap'
 import GlassCard from '@/components/ui/GlassCard.vue'
+import TagList from '@/components/blog/TagList.vue'
 import { usePageTransition } from '@/composables/usePageTransition'
+import { useBlogEntries } from '@/composables/useBlogEntries'
+import { useSeo } from '@/composables/useSeo'
 
-/** 博客条目数据结构 */
-export interface BlogEntry {
-  id: string
-  title: string
-  excerpt: string
-  content: string
-  date: string
-}
+const { entries, status, allTags, fetchEntries } = useBlogEntries()
 
-/** 有感/随笔条目列表（含本地占位数据） */
-const reflectionEntries = ref<BlogEntry[]>([
-  {
-    id: 'r-001',
-    title: '关于克制',
-    excerpt: '好的界面像好的诗。每一个元素都有存在的理由，其余皆是噪声。',
-    content: '好的界面像好的诗——每个元素都有存在的理由，其余皆是噪声。',
-    date: '2026-06-01',
-  },
-  {
-    id: 'r-002',
-    title: '物理与感知',
-    excerpt: 'Verlet 积分教会我，平滑的动画不是插值出来的，而是被力推导出来的。',
-    content: 'Verlet 积分教会我：平滑的动画不是插值出来的，而是被力推导出来的。',
-    date: '2026-05-20',
-  },
-  {
-    id: 'r-003',
-    title: '终末地的灰',
-    excerpt: '暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。',
-    content: '暗色背景不是空虚，是留给内容的负空间。光只在需要的地方亮起。',
-    date: '2026-05-08',
-  },
-])
-
-/** 文章流同步状态：加载中 / 已同步 / 本地占位 */
-const streamStatus = ref<'loading' | 'synced' | 'local'>('loading')
-/** 当前展开阅读的文章 */
-const activeEntry = ref<BlogEntry | null>(null)
-
-/** 精选展示条目 */
-const featuredEntry = computed(() => reflectionEntries.value[0])
-/** 全部条目数量 */
-const totalEntries = computed(() => reflectionEntries.value.length)
-/** 最新发布日期 */
+const featuredEntry = computed(() => entries.value[0])
+const totalEntries = computed(() => entries.value.length)
 const latestDate = computed(() => {
-  const dates = reflectionEntries.value.map((entry) => entry.date).sort().reverse()
+  const dates = entries.value.map((e) => e.date).sort().reverse()
   return dates[0] ?? '--'
 })
-
-/** 文章 API 响应体结构 */
-interface ArticleResponse {
-  data: Array<{
-    id: string
-    title: string
-    category: string
-    content: string
-    created_at: string
-  }>
-  total: number
-  category: string
-}
-
-/** 将 API 文章数据转换为博客条目格式 */
-function toEntry(article: ArticleResponse['data'][number]): BlogEntry {
-  return {
-    id: article.id,
-    title: article.title,
-    excerpt: article.content.replace(/\n/g, ' ').slice(0, 96),
-    content: article.content,
-    date: article.created_at.slice(0, 10),
-  }
-}
-
-/** 展开文章阅读面板 */
-function openEntry(entry: BlogEntry): void {
-  activeEntry.value = entry
-}
-
-/** 关闭文章阅读面板 */
-function closeEntry(): void {
-  activeEntry.value = null
-}
 
 const blogShellRef = ref<HTMLElement | null>(null)
 const { consumeFromEntry, endTransition } = usePageTransition()
 
-/** 从入口页进入时播放错落入场 */
+useSeo({
+  title: 'Blog',
+  description: 'Reflections on design, animation, and engineering.',
+  path: '/blog',
+})
+
 function playEnterFromEntry(): void {
   if (!blogShellRef.value) return
 
@@ -117,27 +52,11 @@ function playEnterFromEntry(): void {
   )
 }
 
-/** 挂载后并行拉取诗文与文章 API，失败则保持离线占位数据 */
 onMounted(async () => {
   if (consumeFromEntry()) {
     playEnterFromEntry()
   }
-
-  try {
-    const postsRes = await fetch('/api/posts')
-    if (!postsRes.ok) throw new Error('offline')
-
-    const postsData = (await postsRes.json()) as ArticleResponse
-
-    if (postsData.data?.length) {
-      reflectionEntries.value = postsData.data.map(toEntry)
-      streamStatus.value = 'synced'
-    } else {
-      streamStatus.value = 'local'
-    }
-  } catch {
-    streamStatus.value = 'local'
-  }
+  await fetchEntries()
 })
 </script>
 
@@ -159,8 +78,8 @@ onMounted(async () => {
           <div class="readout-row">
             <span class="readout-label">status</span>
             <span class="readout-value">
-              <span class="status-dot" :class="streamStatus" />
-              {{ streamStatus === 'synced' ? 'synced' : streamStatus === 'loading' ? 'syncing' : 'local' }}
+              <span class="status-dot" :class="status" />
+              {{ status === 'synced' ? 'synced' : status === 'loading' ? 'syncing' : 'local' }}
             </span>
           </div>
           <div class="readout-row">
@@ -176,80 +95,60 @@ onMounted(async () => {
 
       <section class="feature-strip" data-blog-panel aria-label="精选文章">
         <GlassCard title="精选" code="00" tag="Featured Signal">
-          <button
+          <RouterLink
             v-if="featuredEntry"
-            type="button"
             class="featured-link"
+            :to="`/blog/post/${featuredEntry.id}`"
             :aria-label="`阅读：${featuredEntry.title}`"
-            @click="openEntry(featuredEntry)"
           >
-            <span class="featured-kicker">{{ featuredEntry?.date }}</span>
-            <span class="featured-title iridescent iridescent--soft">{{ featuredEntry?.title }}</span>
-            <span class="featured-excerpt">{{ featuredEntry?.excerpt }}</span>
-          </button>
+            <span class="featured-kicker">{{ featuredEntry.date }}</span>
+            <span class="featured-title iridescent iridescent--soft">{{ featuredEntry.title }}</span>
+            <span class="featured-excerpt">{{ featuredEntry.excerpt }}</span>
+          </RouterLink>
           <template #footer>
             <div class="signal-meter" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-              <span />
-              <span />
+              <span /><span /><span /><span /><span />
             </div>
           </template>
+        </GlassCard>
+      </section>
+
+      <section v-if="allTags.length" class="tags-strip" data-blog-panel aria-label="标签">
+        <GlassCard title="标签" code="02" tag="Taxonomy">
+          <TagList :tags="allTags" />
         </GlassCard>
       </section>
 
       <section id="reflections" class="entry-section reflections-section" data-blog-panel>
         <GlassCard title="有感" code="01" tag="Reflection Stream">
           <ul class="entry-list">
-            <li v-for="(entry, index) in reflectionEntries" :key="entry.id" class="entry-item">
-              <button
-                type="button"
+            <li v-for="(entry, index) in entries" :key="entry.id" class="entry-item">
+              <RouterLink
                 class="entry-link"
+                :to="`/blog/post/${entry.id}`"
                 :aria-label="`阅读：${entry.title}`"
-                @click="openEntry(entry)"
               >
                 <span class="entry-index">{{ String(index + 1).padStart(2, '0') }}</span>
                 <span class="entry-content">
                   <span class="entry-meta">
                     <time class="entry-date">{{ entry.date }}</time>
                     <span class="entry-id">{{ entry.id }}</span>
+                    <span class="entry-reading">{{ entry.readingMinutes }} min</span>
                   </span>
                   <span class="entry-title">{{ entry.title }}</span>
                   <span class="entry-excerpt">{{ entry.excerpt }}</span>
+                  <TagList :tags="entry.tags" />
                 </span>
-              </button>
+              </RouterLink>
             </li>
           </ul>
           <template #footer>
-            <span class="entry-count">{{ reflectionEntries.length }} entries</span>
+            <span class="entry-count">{{ entries.length }} entries</span>
+            <a class="rss-link" href="/api/rss" target="_blank" rel="noopener">RSS ↗</a>
           </template>
         </GlassCard>
       </section>
     </div>
-
-    <Teleport to="body">
-      <div
-        v-if="activeEntry"
-        class="entry-reader"
-        role="dialog"
-        aria-modal="true"
-        :aria-label="activeEntry.title"
-        @click.self="closeEntry"
-        @keydown.escape="closeEntry"
-      >
-        <article class="entry-reader__panel">
-          <header class="entry-reader__header">
-            <time class="entry-reader__date">{{ activeEntry.date }}</time>
-            <button type="button" class="entry-reader__close" aria-label="关闭" @click="closeEntry">
-              ×
-            </button>
-          </header>
-          <h2 class="entry-reader__title">{{ activeEntry.title }}</h2>
-          <p class="entry-reader__body">{{ activeEntry.content }}</p>
-        </article>
-      </div>
-    </Teleport>
   </main>
 </template>
 
@@ -267,6 +166,7 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 0.95fr);
   grid-template-areas:
     'hero feature'
+    'tags tags'
     'reflections reflections';
   gap: 1rem;
   max-width: var(--content-max);
@@ -368,7 +268,12 @@ onMounted(async () => {
   min-width: 0;
 }
 
-.feature-strip :deep(.glass-card) {
+.tags-strip {
+  grid-area: tags;
+}
+
+.feature-strip :deep(.glass-card),
+.tags-strip :deep(.glass-card) {
   height: 100%;
 }
 
@@ -380,6 +285,7 @@ onMounted(async () => {
   padding: 1.5rem;
   color: inherit;
   text-align: left;
+  text-decoration: none;
   background:
     linear-gradient(150deg, rgba(124, 140, 255, 0.12), transparent 42%),
     transparent;
@@ -464,9 +370,8 @@ onMounted(async () => {
   padding: 1.15rem 1.5rem 1.25rem;
   color: inherit;
   text-align: left;
+  text-decoration: none;
   background: transparent;
-  border: 0;
-  cursor: pointer;
   transition:
     background 0.35s var(--ease-mechanical),
     transform 0.35s var(--ease-mechanical);
@@ -500,7 +405,8 @@ onMounted(async () => {
 }
 
 .entry-date,
-.entry-id {
+.entry-id,
+.entry-reading {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   letter-spacing: 0.1em;
@@ -523,6 +429,7 @@ onMounted(async () => {
 }
 
 .entry-excerpt {
+  margin-bottom: 0.5rem;
   font-size: var(--text-sm);
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.52);
@@ -538,6 +445,14 @@ onMounted(async () => {
   letter-spacing: var(--tracking-wide);
   color: rgba(255, 255, 255, 0.35);
   text-transform: uppercase;
+}
+
+.rss-link {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  color: #9ed8ff;
+  text-decoration: none;
 }
 
 .status-dot {
@@ -562,78 +477,6 @@ onMounted(async () => {
   background: var(--color-muted);
 }
 
-.entry-reader {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 1.5rem;
-  background: rgba(4, 6, 14, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-}
-
-.entry-reader__panel {
-  width: min(100%, 36rem);
-  max-height: min(80dvh, 32rem);
-  overflow-y: auto;
-  padding: 1.75rem 1.5rem 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(8, 8, 16, 0.88);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-}
-
-.entry-reader__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.entry-reader__date {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.38);
-}
-
-.entry-reader__close {
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 50%;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  transition: border-color 0.3s var(--ease-mechanical);
-}
-
-.entry-reader__close:hover {
-  border-color: rgba(158, 216, 255, 0.45);
-}
-
-.entry-reader__title {
-  margin: 0 0 1.25rem;
-  font-size: clamp(1.5rem, 4vw, 2.25rem);
-  line-height: 1.15;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.entry-reader__body {
-  margin: 0;
-  font-size: var(--text-base);
-  line-height: 2;
-  white-space: pre-line;
-  color: rgba(255, 255, 255, 0.68);
-}
-
 @keyframes pulse {
   0%,
   100% {
@@ -650,6 +493,7 @@ onMounted(async () => {
     grid-template-areas:
       'hero'
       'feature'
+      'tags'
       'reflections';
   }
 

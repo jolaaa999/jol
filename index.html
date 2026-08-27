@@ -4,13 +4,32 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="JOL — Developer & creator. Blog, works, and reflections on design, animation, and engineering."
+    />
+    <meta name="author" content="JOL" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="JOL" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="alternate" type="application/rss+xml" title="JOL Blog RSS" href="/feed.xml" />
+    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;700&family=JetBrains+Mono:wght@300;400&family=Noto+Sans+SC:wght@300;700&display=swap"
       rel="stylesheet"
     />
-    <title>jol</title>
+    <title>JOL — Developer & Creator</title>
+    <script>
+      ;(function () {
+        try {
+          var t = localStorage.getItem('jol-theme')
+          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

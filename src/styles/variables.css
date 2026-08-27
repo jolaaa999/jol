@@ -57,6 +57,29 @@
   --section-gap: 6rem;
 }
 
+[data-theme='light'] {
+  --color-bg: #f4f4f6;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #eef0f4;
+  --color-border: rgba(0, 0, 0, 0.08);
+  --color-border-strong: rgba(0, 0, 0, 0.14);
+  --color-muted: #6b7280;
+  --color-foreground: #111113;
+  --color-foreground-dim: #4b5563;
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .glass-fluid {
+  background: rgba(255, 255, 255, 0.65);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='light'] .app-stage--fluid {
+  color: rgba(17, 17, 19, 0.92);
+}
+
 @media (prefers-reduced-motion: reduce) {
   :root {
     --ease-mechanical: linear;

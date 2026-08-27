@@ -4,8 +4,16 @@ import { useRouter } from 'vue-router'
 import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
 import { usePageTransition } from '@/composables/usePageTransition'
 import WorksShowcase from '@/components/works/WorksShowcase.vue'
+import AboutSection from '@/components/about/AboutSection.vue'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
+import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import { useCommandPalette } from '@/composables/useCommandPalette'
 import { FLUID_CYCLE_KEY } from '@/composables/fluidGradientContext'
+import { useSeo } from '@/composables/useSeo'
+
+useSeo({ path: '/entry' })
+
+const { show: showCommandPalette } = useCommandPalette()
 
 /** 页面根元素 */
 const rootRef = ref<HTMLElement | null>(null)
@@ -22,6 +30,7 @@ const headlineChars = HEADLINE.split('')
 /** 侧边菜单项 */
 const menuItems: EntryMenuItem[] = [
   { id: 'home', label: 'HOME', href: '/blog' },
+  { id: 'about', label: 'ABOUT', href: '#about' },
   { id: 'works', label: 'WORKS', href: '#works' },
   { id: 'reflections', label: 'REFLECTIONS', href: '/blog#reflections' },
   { id: 'contact', label: 'CONTACT', href: '#contact' },
@@ -95,17 +104,27 @@ function scrollToWorks(): void {
         <span class="entry__brand-dot" />
       </div>
 
-      <button
-        type="button"
-        class="entry__menu-trigger"
-        data-hero-block
-        :aria-expanded="menuOpen"
-        aria-controls="entry-menu"
-        @click="toggleMenu"
-      >
-        <span>Menu</span>
-        <span class="entry__menu-icon" aria-hidden="true">+</span>
-      </button>
+      <div class="entry__header-actions" data-hero-block>
+        <button
+          type="button"
+          class="entry__search-trigger"
+          aria-label="搜索"
+          @click="showCommandPalette"
+        >
+          ⌘K
+        </button>
+        <ThemeToggle />
+        <button
+          type="button"
+          class="entry__menu-trigger"
+          :aria-expanded="menuOpen"
+          aria-controls="entry-menu"
+          @click="toggleMenu"
+        >
+          <span>Menu</span>
+          <span class="entry__menu-icon" aria-hidden="true">+</span>
+        </button>
+      </div>
     </header>
 
     <main class="entry__hero">
@@ -175,6 +194,8 @@ function scrollToWorks(): void {
         </div>
       </div>
     </main>
+
+    <AboutSection />
 
     <WorksShowcase />
 
@@ -308,6 +329,22 @@ function scrollToWorks(): void {
   align-items: center;
   justify-content: space-between;
   padding: clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.75rem);
+}
+
+.entry__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.entry__search-trigger {
+  padding: 0.4rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  cursor: pointer;
 }
 
 .entry__brand {
