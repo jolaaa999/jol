@@ -10,8 +10,6 @@ const countLabel = (n: number) => String(n).padStart(2, '0')
 <template>
   <header class="archive-header" data-archive-header>
     <div class="archive-header__grid">
-      <p class="archive-header__section-num">01</p>
-
       <div class="archive-header__copy">
         <p class="archive-header__eyebrow">ARCHIVE</p>
         <h2 id="works-title" class="archive-header__title">作品档案</h2>
@@ -57,17 +55,8 @@ const countLabel = (n: number) => String(n).padStart(2, '0')
   align-items: end;
 }
 
-.archive-header__section-num {
-  grid-column: 1 / 2;
-  margin: 0 0 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.14em;
-  color: var(--arch-meta);
-}
-
 .archive-header__copy {
-  grid-column: 2 / 9;
+  grid-column: 1 / 9;
 }
 
 .archive-header__eyebrow {
@@ -173,7 +162,7 @@ const countLabel = (n: number) => String(n).padStart(2, '0')
 
 @media (max-width: 960px) {
   .archive-header__copy {
-    grid-column: 2 / 7;
+    grid-column: 1 / 7;
   }
 
   .archive-header__aside {
@@ -191,10 +180,6 @@ const countLabel = (n: number) => String(n).padStart(2, '0')
 }
 
 @media (max-width: 620px) {
-  .archive-header__section-num {
-    grid-column: 1 / -1;
-  }
-
   .archive-header__copy {
     grid-column: 1 / -1;
   }
