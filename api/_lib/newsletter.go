@@ -28,7 +28,7 @@ func SubscribeNewsletter(email string) (NewsletterResult, int, error) {
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("NEWSLETTER_PROVIDER")))
 	if provider == "" {
 		switch {
-		case strings.TrimSpace(os.Getenv("RESEND_API_KEY")) != "":
+		case sanitizeAPIKey(os.Getenv("RESEND_API_KEY")) != "":
 			provider = "resend"
 		case strings.TrimSpace(os.Getenv("BUTTONDOWN_API_KEY")) != "":
 			provider = "buttondown"
@@ -57,9 +57,12 @@ func SubscribeNewsletter(email string) (NewsletterResult, int, error) {
 }
 
 func subscribeResend(email string) error {
-	apiKey := strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
+	apiKey := sanitizeAPIKey(os.Getenv("RESEND_API_KEY"))
 	if apiKey == "" {
 		return fmt.Errorf("missing_resend_api_key")
+	}
+	if !strings.HasPrefix(apiKey, "re_") {
+		return fmt.Errorf("invalid_resend_api_key_format")
 	}
 
 	contactBody := map[string]any{
@@ -178,6 +181,7 @@ func subscribeButtondown(email string) error {
 }
 
 func resendRequest(method, url, apiKey string, payload any) error {
+	apiKey = sanitizeAPIKey(apiKey)
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -202,4 +206,57 @@ func resendRequest(method, url, apiKey string, payload any) error {
 		return nil
 	}
 	return fmt.Errorf("resend_%d: %s", res.StatusCode, string(raw))
+}
+
+func sanitizeAPIKey(raw string) string {
+	key := strings.TrimSpace(raw)
+	key = strings.Trim(key, `"'`)
+	key = strings.ReplaceAll(key, "\n", "")
+	key = strings.ReplaceAll(key, "\r", "")
+	return key
+}
+
+// VerifyResendKey 调用 Resend API 验证 Key 是否有效（不暴露完整密钥）
+func VerifyResendKey() (valid bool, hint string, errMsg string) {
+	apiKey := sanitizeAPIKey(os.Getenv("RESEND_API_KEY"))
+	if apiKey == "" {
+		return false, "", "RESEND_API_KEY 未设置"
+	}
+	if !strings.HasPrefix(apiKey, "re_") {
+		return false, "", "Key 格式错误，应以 re_ 开头"
+	}
+	if len(apiKey) < 20 {
+		return false, "", "Key 长度过短，可能复制不完整"
+	}
+
+	hint = apiKey[:min(7, len(apiKey))] + "…"
+
+	req, err := http.NewRequest(http.MethodGet, "https://api.resend.com/domains", nil)
+	if err != nil {
+		return false, hint, err.Error()
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return false, hint, "无法连接 Resend API"
+	}
+	defer res.Body.Close()
+
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode == http.StatusOK {
+		return true, hint, ""
+	}
+	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+		return false, hint, "API Key 无效或权限不足，请在 Resend 重新生成 Full access 密钥"
+	}
+	return false, hint, fmt.Sprintf("resend_%d: %s", res.StatusCode, string(raw))
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
