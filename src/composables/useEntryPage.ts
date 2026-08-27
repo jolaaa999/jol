@@ -22,9 +22,9 @@ const LAYER_STAGGER = 0.15
 const LAYER_DURATION = 0.56
 /** 开合缓动 */
 const MENU_EASE = 'power3.inOut'
-/** 白面板 clip：从左侧裁切 100% = 收起于右缘；0 = 完全展开 */
-const PANEL_CLIP_CLOSED = 'inset(0 0 0 100%)'
-const PANEL_CLIP_OPEN = 'inset(0 0 0 0)'
+/** 白面板滑入：xPercent 100 = 整体在右缘外；0 = 就位 */
+const PANEL_SLIDE_CLOSED = 100
+const PANEL_SLIDE_OPEN = 0
 
 /** 入口页 GSAP：Hero 入场 + 三色递推菜单 */
 export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
@@ -115,7 +115,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     setMaskedTextHidden(menuTextEls)
   }
 
-  /** 收拢态：色带 scaleX=0，白面板从右缘 clip 收起 */
+  /** 收拢态：色带 scaleX=0，白面板收在右缘外 */
   function initMenuClosed(): void {
     if (!rootRef.value) return
 
@@ -126,7 +126,11 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       transformOrigin: MENU_ORIGIN,
       force3D: true,
     })
-    gsap.set(panel, { clipPath: PANEL_CLIP_CLOSED })
+    gsap.set(panel, {
+      xPercent: PANEL_SLIDE_CLOSED,
+      transformOrigin: MENU_ORIGIN,
+      force3D: true,
+    })
     gsap.set(backdrop, { opacity: 0 })
     resetMenuTextHidden(rootRef.value)
   }
@@ -146,7 +150,11 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       transformOrigin: MENU_ORIGIN,
       force3D: true,
     })
-    gsap.set(panel, { clipPath: PANEL_CLIP_CLOSED })
+    gsap.set(panel, {
+      xPercent: PANEL_SLIDE_CLOSED,
+      transformOrigin: MENU_ORIGIN,
+      force3D: true,
+    })
     gsap.set(backdrop, { opacity: 0 })
     resetMenuTextHidden(rootRef.value)
 
@@ -158,7 +166,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
 
     if (reduced) {
       gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: MENU_ORIGIN })
-      gsap.set(panel, { clipPath: PANEL_CLIP_OPEN })
+      gsap.set(panel, { xPercent: PANEL_SLIDE_OPEN, transformOrigin: MENU_ORIGIN })
       gsap.set(backdrop, { opacity: 1 })
       gsap.set(allText, { yPercent: 0 })
       isAnimating.value = false
@@ -193,13 +201,14 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       LAYER_STAGGER,
     )
 
-    /* ③ 白色面板：从右缘 clip 揭开（视觉等同 scaleX，不压扁字） */
+    /* ③ 白色面板：与色带同向平移滑入（避免 clip-path 插值跳变） */
     menuTimeline.to(
       panel,
       {
-        clipPath: PANEL_CLIP_OPEN,
+        xPercent: PANEL_SLIDE_OPEN,
         duration: LAYER_DURATION + 0.1,
         ease: MENU_EASE,
+        force3D: true,
       },
       LAYER_STAGGER * 2,
     )
@@ -263,7 +272,12 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     menuTimeline
       .to(
         panel,
-        { clipPath: PANEL_CLIP_CLOSED, duration: 0.48, ease: MENU_EASE },
+        {
+          xPercent: PANEL_SLIDE_CLOSED,
+          duration: 0.48,
+          ease: MENU_EASE,
+          force3D: true,
+        },
         0.12,
       )
       .to(

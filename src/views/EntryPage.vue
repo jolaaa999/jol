@@ -707,8 +707,9 @@ function scrollToWorks(): void {
   display: flex;
   flex-direction: column;
   pointer-events: auto;
-  /* 从右缘揭开（左侧裁切），与色带递推方向一致，且不压扁文字 */
-  clip-path: inset(0 0 0 100%);
+  /* 初始收在右缘外，由 GSAP xPercent 滑入 */
+  transform: translateX(100%);
+  transform-origin: right center;
 }
 
 .entry__menu-close {
