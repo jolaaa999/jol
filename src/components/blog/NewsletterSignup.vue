@@ -17,13 +17,24 @@ async function submit(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.value.trim() }),
     })
-    if (!res.ok) throw new Error('failed')
+
+    const data = (await res.json().catch(() => ({}))) as {
+      message?: string
+      error?: string
+    }
+
+    if (!res.ok) {
+      status.value = 'error'
+      message.value = data.message || '订阅失败，请稍后重试或直接邮件联系。'
+      return
+    }
+
     status.value = 'success'
-    message.value = '已订阅，感谢关注。'
+    message.value = '已订阅。请查收确认邮件（可能在垃圾箱）。'
     email.value = ''
   } catch {
     status.value = 'error'
-    message.value = '订阅失败，请稍后重试或直接邮件联系。'
+    message.value = '网络异常，请稍后重试或直接邮件联系。'
   }
 }
 </script>
@@ -40,6 +51,7 @@ async function submit(): Promise<void> {
         placeholder="your@email.com"
         required
         autocomplete="email"
+        :disabled="status === 'loading'"
       />
       <button type="submit" class="newsletter__btn" :disabled="status === 'loading'">
         {{ status === 'loading' ? '…' : 'Subscribe' }}
@@ -92,6 +104,10 @@ async function submit(): Promise<void> {
 .newsletter__input:focus {
   outline: none;
   border-color: rgba(158, 216, 255, 0.45);
+}
+
+.newsletter__input:disabled {
+  opacity: 0.6;
 }
 
 .newsletter__btn {
