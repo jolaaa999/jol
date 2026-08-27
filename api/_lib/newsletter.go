@@ -77,12 +77,8 @@ func subscribeResend(email string) error {
 
 	err := resendRequest("POST", "https://api.resend.com/contacts", apiKey, contactBody)
 	if err != nil && segmentID != "" && isResendContactError(err) {
-		// Segment 配置错误时，降级为仅创建联系人
 		delete(contactBody, "segments")
 		err = resendRequest("POST", "https://api.resend.com/contacts", apiKey, contactBody)
-	}
-	if err != nil && !isResendDuplicate(err) {
-		return err
 	}
 
 	from := normalizeFromEmail(os.Getenv("RESEND_FROM_EMAIL"))
@@ -91,18 +87,17 @@ func subscribeResend(email string) error {
 		siteURL = "https://jol-ten.vercel.app"
 	}
 
-	// 欢迎信失败不阻断订阅（联系人已入库）
-	_ = resendRequest("POST", "https://api.resend.com/emails", apiKey, map[string]any{
-		"from":    from,
-		"to":      []string{email},
-		"subject": "欢迎订阅 JOL Newsletter",
-		"html": fmt.Sprintf(`<div style="font-family:ui-monospace,monospace;line-height:1.7;color:#111">
-<p>你好，</p>
-<p>你已成功订阅 <strong>JOL</strong> 的 Newsletter。</p>
-<p>之后有新文章时会邮件通知你。</p>
-<p><a href="%s/blog">阅读博客 →</a></p>
-</div>`, siteURL),
-	})
+	contactsOK := err == nil || isResendDuplicate(err)
+	if !contactsOK && isResendPermissionDenied(err) {
+		// Sending-only 密钥：无法写 Contacts，降级为发欢迎信
+		if mailErr := sendResendWelcomeWithFrom(apiKey, email, from, siteURL); mailErr != nil {
+			return mailErr
+		}
+	} else if !contactsOK {
+		return err
+	} else {
+		_ = sendResendWelcomeWithFrom(apiKey, email, from, siteURL)
+	}
 
 	if notifyTo := strings.TrimSpace(os.Getenv("NEWSLETTER_NOTIFY_TO")); notifyTo != "" {
 		_ = resendRequest("POST", "https://api.resend.com/emails", apiKey, map[string]any{
@@ -147,6 +142,34 @@ func isResendContactError(err error) bool {
 	return strings.Contains(msg, "segment") ||
 		strings.Contains(msg, "422") ||
 		strings.Contains(msg, "validation")
+}
+
+func isResendPermissionDenied(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "resend_403")
+}
+
+func isResendUnauthorized(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "resend_401")
+}
+
+func sendResendWelcomeWithFrom(apiKey, email, from, siteURL string) error {
+	return resendRequest("POST", "https://api.resend.com/emails", apiKey, map[string]any{
+		"from":    from,
+		"to":      []string{email},
+		"subject": "欢迎订阅 JOL Newsletter",
+		"html": fmt.Sprintf(`<div style="font-family:ui-monospace,monospace;line-height:1.7;color:#111">
+<p>你好，</p>
+<p>你已成功订阅 <strong>JOL</strong> 的 Newsletter。</p>
+<p>之后有新文章时会邮件通知你。</p>
+<p><a href="%s/blog">阅读博客 →</a></p>
+</div>`, siteURL),
+	})
 }
 
 func subscribeButtondown(email string) error {
@@ -248,8 +271,11 @@ func VerifyResendKey() (valid bool, hint string, errMsg string) {
 	if res.StatusCode == http.StatusOK {
 		return true, hint, ""
 	}
-	if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
-		return false, hint, "API Key 无效或权限不足，请在 Resend 重新生成 Full access 密钥"
+	if res.StatusCode == http.StatusUnauthorized {
+		return false, hint, "密钥无效或已撤销。请在 Resend 删除旧 Key，创建新的 Full access 密钥并更新 Vercel"
+	}
+	if res.StatusCode == http.StatusForbidden {
+		return false, hint, "密钥权限不足（可能是 Sending only）。请创建 Full access 密钥；订阅功能可降级为仅发信模式"
 	}
 	return false, hint, fmt.Sprintf("resend_%d: %s", res.StatusCode, string(raw))
 }
