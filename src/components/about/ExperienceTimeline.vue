@@ -54,7 +54,7 @@ import { EXPERIENCE } from '@/data/site'
   left: 3px;
   width: 1px;
   height: calc(100% + 1.5rem);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--fluid-border);
 }
 
 .timeline__period {
@@ -64,14 +64,14 @@ import { EXPERIENCE } from '@/data/site'
   font-size: 0.6rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--fluid-fg-dim);
 }
 
 .timeline__role {
   margin: 0 0 0.2rem;
   font-size: 1rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--fluid-fg);
 }
 
 .timeline__org {
@@ -85,6 +85,6 @@ import { EXPERIENCE } from '@/data/site'
   margin: 0;
   font-size: 0.8125rem;
   line-height: 1.7;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--fluid-fg-muted);
 }
 </style>

@@ -4,13 +4,13 @@
  */
 
 html[data-theme='light'] {
-  --fluid-fg: rgba(15, 23, 42, 0.92);
-  --fluid-fg-muted: rgba(15, 23, 42, 0.58);
-  --fluid-fg-dim: rgba(15, 23, 42, 0.38);
-  --fluid-border: rgba(15, 23, 42, 0.1);
-  --fluid-surface: rgba(255, 255, 255, 0.55);
-  --fluid-surface-hover: rgba(255, 255, 255, 0.78);
-  --fluid-grain-opacity: 0.055;
+  --fluid-fg: rgba(12, 18, 34, 0.94);
+  --fluid-fg-muted: rgba(12, 18, 34, 0.72);
+  --fluid-fg-dim: rgba(12, 18, 34, 0.52);
+  --fluid-border: rgba(12, 18, 34, 0.14);
+  --fluid-surface: rgba(255, 255, 255, 0.72);
+  --fluid-surface-hover: rgba(255, 255, 255, 0.9);
+  --fluid-grain-opacity: 0.04;
 }
 
 /* ── 页面根色 ── */
@@ -65,17 +65,16 @@ html[data-theme='light'] .entry__menu-trigger {
   color: var(--fluid-fg);
 }
 
-/* ── Entry CTA ── */
-html[data-theme='light'] .entry__cta--primary {
-  border-color: rgba(2, 132, 199, 0.35);
-  background: rgba(255, 255, 255, 0.72);
-  color: rgba(15, 23, 42, 0.9);
+/* ── Entry CTA：透明描边，无暗色底块 ── */
+html[data-theme='light'] .entry__cta--primary,
+html[data-theme='light'] .entry__cta--secondary {
+  background: transparent;
+  box-shadow: none;
 }
 
-html[data-theme='light'] .entry__cta--secondary {
-  border-color: var(--fluid-border);
-  background: var(--fluid-surface);
-  color: var(--fluid-fg);
+html[data-theme='light'] .entry__cta--primary:hover,
+html[data-theme='light'] .entry__cta--secondary:hover {
+  background: var(--cta-bg-hover);
 }
 
 html[data-theme='light'] .entry__cta--ghost {
@@ -320,8 +319,37 @@ html[data-theme='light'] .works__lead {
   color: var(--fluid-fg-muted);
 }
 
+html[data-theme='light'] .about__title,
+html[data-theme='light'] .about__name,
+html[data-theme='light'] .works__title,
+html[data-theme='light'] .works__stat-value {
+  color: var(--fluid-fg);
+}
+
+html[data-theme='light'] .about__heading,
+html[data-theme='light'] .about__skill-name {
+  color: var(--fluid-fg);
+}
+
+html[data-theme='light'] .about__value-text {
+  color: var(--fluid-fg-muted);
+}
+
 html[data-theme='light'] .timeline__period {
   color: var(--fluid-fg-dim);
+}
+
+html[data-theme='light'] .timeline__role {
+  color: var(--fluid-fg);
+}
+
+html[data-theme='light'] .timeline__org,
+html[data-theme='light'] .timeline__desc {
+  color: var(--fluid-fg-muted);
+}
+
+html[data-theme='light'] .timeline__item:not(:last-child) .timeline__marker::after {
+  background: var(--fluid-border);
 }
 
 /* ── 流体背景噪点 ── */

@@ -72,8 +72,8 @@ function langTint(lang: string): string {
   position: relative;
   min-height: 11.5rem;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(6, 6, 14, 0.52);
+  border: 1px solid var(--work-card-border);
+  background: var(--work-card-bg);
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
   overflow: hidden;
@@ -111,10 +111,10 @@ function langTint(lang: string): string {
 
 .work-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: color-mix(in srgb, var(--work-card-border) 70%, var(--work-accent) 30%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 24px 64px rgba(0, 0, 0, 0.38);
+    inset 0 1px 0 var(--fluid-glass-inset, rgba(255, 255, 255, 0.08)),
+    0 24px 64px var(--work-card-hover-shadow);
 }
 
 .work-card:hover::before {
@@ -154,7 +154,7 @@ function langTint(lang: string): string {
   font-family: var(--font-mono);
   font-size: 0.6rem;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--work-card-fg-dim);
 }
 
 .work-card__title {
@@ -163,7 +163,7 @@ function langTint(lang: string): string {
   font-weight: 700;
   line-height: 1.12;
   letter-spacing: -0.025em;
-  color: rgba(255, 255, 255, 0.94);
+  color: var(--work-card-fg);
 }
 
 .work-card__desc {
@@ -173,7 +173,7 @@ function langTint(lang: string): string {
   font-size: 0.8125rem;
   font-weight: 300;
   line-height: 1.72;
-  color: rgba(255, 255, 255, 0.48);
+  color: var(--work-card-fg-muted);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -194,15 +194,15 @@ function langTint(lang: string): string {
   align-items: center;
   gap: 0.35rem;
   padding: 0.45rem 0.85rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--work-card-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--work-card-btn-bg);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   text-decoration: none;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--work-card-fg-muted);
   transition:
     background 0.35s var(--ease-mechanical),
     border-color 0.35s var(--ease-mechanical),
@@ -210,9 +210,9 @@ function langTint(lang: string): string {
 }
 
 .work-card__btn:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.92);
+  border-color: color-mix(in srgb, var(--work-card-border) 50%, var(--work-accent) 50%);
+  background: var(--fluid-surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--work-card-fg);
 }
 
 .work-card__btn--live {
@@ -242,26 +242,49 @@ function langTint(lang: string): string {
   color: rgba(240, 171, 252, 0.75);
 }
 
-/* ── Featured：首项大卡片 ── */
+/* ── Featured：双列布局，简介居右填充空间 ── */
 .work-card--featured {
-  min-height: 20rem;
+  min-height: 18rem;
 }
 
 .work-card--featured .work-card__body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  grid-template-rows: auto auto 1fr;
+  column-gap: clamp(1.25rem, 3vw, 2.5rem);
+  row-gap: 0.85rem;
+  align-content: start;
   padding: clamp(1.5rem, 3vw, 2.25rem);
-  gap: 1.1rem;
+}
+
+.work-card--featured .work-card__head {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .work-card--featured .work-card__title {
+  grid-column: 1;
+  grid-row: 2;
   font-size: clamp(1.75rem, 4vw, 2.75rem);
-  max-width: 14em;
+  max-width: none;
 }
 
 .work-card--featured .work-card__desc {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
   font-size: 0.875rem;
   line-height: 1.85;
-  max-width: 36rem;
-  -webkit-line-clamp: 4;
+  max-width: none;
+  -webkit-line-clamp: 6;
+}
+
+.work-card--featured .work-card__actions {
+  grid-column: 1;
+  grid-row: 3;
+  align-self: end;
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .work-card--featured .work-card__glow {
@@ -270,18 +293,64 @@ function langTint(lang: string): string {
   opacity: 0.25;
 }
 
-/* ── Wide：横向舒展 ── */
+/* ── Wide / Lead：横向舒展，单行高度 ── */
+.work-card--wide {
+  min-height: 11.5rem;
+}
+
 .work-card--wide .work-card__body {
-  padding: 1.5rem 1.6rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  grid-template-rows: auto 1fr auto;
+  column-gap: 1.5rem;
+  row-gap: 0.65rem;
+  padding: 1.35rem 1.5rem;
+}
+
+.work-card--wide .work-card__head {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .work-card--wide .work-card__title {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: start;
   font-size: clamp(1.35rem, 2.8vw, 1.85rem);
 }
 
+.work-card--wide .work-card__desc {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  align-self: center;
+  -webkit-line-clamp: 4;
+}
+
+.work-card--wide .work-card__actions {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin-top: 0;
+  padding-top: 0.5rem;
+}
+
 @media (max-width: 620px) {
-  .work-card--featured {
-    min-height: 16rem;
+  .work-card--featured,
+  .work-card--wide {
+    min-height: auto;
+  }
+
+  .work-card--featured .work-card__body,
+  .work-card--wide .work-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 1.25rem 1.3rem;
+  }
+
+  .work-card--featured .work-card__desc,
+  .work-card--wide .work-card__desc {
+    align-self: auto;
+    -webkit-line-clamp: 3;
   }
 
   .work-card__actions {

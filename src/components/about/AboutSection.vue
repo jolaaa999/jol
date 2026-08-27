@@ -87,7 +87,7 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
   font-size: clamp(1.75rem, 4vw, 2.75rem);
   line-height: 1.1;
   font-weight: 800;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--fluid-fg);
 }
 
 .about__lead {
@@ -96,7 +96,7 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
   font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.75;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--fluid-fg-muted);
 }
 
 .about__grid {
@@ -136,14 +136,14 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
 .about__name {
   margin: 0 0 0.35rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--fluid-fg);
 }
 
 .about__bio {
   margin: 0;
   font-size: 0.8125rem;
   line-height: 1.65;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--fluid-fg-muted);
 }
 
 .about__resume {
@@ -171,7 +171,7 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
   font-size: 0.625rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--fluid-fg-dim);
 }
 
 .about__skills {
@@ -188,7 +188,7 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
   margin-bottom: 0.3rem;
   font-family: var(--font-mono);
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--fluid-fg);
 }
 
 .about__skill-bar {
@@ -224,7 +224,7 @@ import ExperienceTimeline from '@/components/about/ExperienceTimeline.vue'
 .about__value-text {
   font-size: 0.8125rem;
   line-height: 1.65;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--fluid-fg-muted);
 }
 
 @media (max-width: 800px) {

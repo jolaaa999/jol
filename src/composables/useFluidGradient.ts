@@ -44,30 +44,30 @@ export const FLUID_PALETTES_DARK: FluidPalette[] = [
 export const FLUID_PALETTES_LIGHT: FluidPalette[] = [
   {
     id: 'sky-dawn',
-    base: ['#eef8ff', '#dceefb', '#e8f7fc'],
+    base: ['#dbeafe', '#bfdbfe', '#d4e8f5'],
     blobs: [
-      { x: 0.2, y: 0.35, r: 0.46, color: 'rgba(125, 211, 252, 0.62)' },
-      { x: 0.72, y: 0.28, r: 0.4, color: 'rgba(103, 232, 249, 0.55)' },
-      { x: 0.48, y: 0.74, r: 0.38, color: 'rgba(165, 243, 252, 0.5)' },
-      { x: 0.84, y: 0.58, r: 0.3, color: 'rgba(186, 230, 253, 0.45)' },
+      { x: 0.2, y: 0.35, r: 0.46, color: 'rgba(56, 189, 248, 0.42)' },
+      { x: 0.72, y: 0.28, r: 0.4, color: 'rgba(34, 211, 238, 0.38)' },
+      { x: 0.48, y: 0.74, r: 0.38, color: 'rgba(96, 165, 250, 0.32)' },
+      { x: 0.84, y: 0.58, r: 0.3, color: 'rgba(125, 211, 252, 0.28)' },
     ],
   },
   {
     id: 'mist-cyan',
-    base: ['#f0f9ff', '#e0f2fe', '#ecfeff'],
+    base: ['#e0f2fe', '#cce7f5', '#e6f6ff'],
     blobs: [
-      { x: 0.32, y: 0.42, r: 0.42, color: 'rgba(56, 189, 248, 0.48)' },
-      { x: 0.68, y: 0.38, r: 0.36, color: 'rgba(34, 211, 238, 0.42)' },
-      { x: 0.55, y: 0.78, r: 0.34, color: 'rgba(147, 197, 253, 0.38)' },
+      { x: 0.32, y: 0.42, r: 0.42, color: 'rgba(14, 165, 233, 0.32)' },
+      { x: 0.68, y: 0.38, r: 0.36, color: 'rgba(6, 182, 212, 0.28)' },
+      { x: 0.55, y: 0.78, r: 0.34, color: 'rgba(59, 130, 246, 0.22)' },
     ],
   },
   {
     id: 'cloud-aqua',
-    base: ['#f8fcff', '#dff6f8', '#e6f4ff'],
+    base: ['#edf4fa', '#d5e8f0', '#e2edf5'],
     blobs: [
-      { x: 0.26, y: 0.3, r: 0.44, color: 'rgba(14, 165, 233, 0.35)' },
-      { x: 0.64, y: 0.52, r: 0.4, color: 'rgba(45, 212, 191, 0.32)' },
-      { x: 0.5, y: 0.8, r: 0.32, color: 'rgba(96, 165, 250, 0.28)' },
+      { x: 0.26, y: 0.3, r: 0.44, color: 'rgba(2, 132, 199, 0.26)' },
+      { x: 0.64, y: 0.52, r: 0.4, color: 'rgba(20, 184, 166, 0.22)' },
+      { x: 0.5, y: 0.8, r: 0.32, color: 'rgba(37, 99, 235, 0.18)' },
     ],
   },
 ]

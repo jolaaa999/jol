@@ -69,40 +69,68 @@
   --fluid-glass-inset: rgba(255, 255, 255, 0.08);
   --fluid-glass-shadow: rgba(0, 0, 0, 0.28);
   --fluid-grain-opacity: 0.035;
+
+  /* ── 作品卡片 ── */
+  --work-card-bg: rgba(6, 6, 14, 0.52);
+  --work-card-border: rgba(255, 255, 255, 0.09);
+  --work-card-fg: rgba(255, 255, 255, 0.94);
+  --work-card-fg-muted: rgba(255, 255, 255, 0.48);
+  --work-card-fg-dim: rgba(255, 255, 255, 0.28);
+  --work-card-btn-bg: rgba(255, 255, 255, 0.04);
+  --work-card-hover-shadow: rgba(0, 0, 0, 0.38);
+
+  /* ── CTA 按钮 ── */
+  --cta-bg: transparent;
+  --cta-bg-hover: rgba(255, 255, 255, 0.08);
+  --cta-border: rgba(255, 255, 255, 0.18);
+  --cta-fg: rgba(255, 255, 255, 0.9);
 }
 
 [data-theme='light'] {
-  --color-bg: #eef6fc;
+  --color-bg: #e2edf5;
   --color-surface: #ffffff;
   --color-surface-elevated: #f0f9ff;
-  --color-border: rgba(15, 23, 42, 0.08);
-  --color-border-strong: rgba(15, 23, 42, 0.14);
-  --color-muted: #64748b;
-  --color-foreground: #0f172a;
-  --color-foreground-dim: #475569;
+  --color-border: rgba(15, 23, 42, 0.12);
+  --color-border-strong: rgba(15, 23, 42, 0.18);
+  --color-muted: #475569;
+  --color-foreground: #0c1222;
+  --color-foreground-dim: #334155;
   --color-accent: #ea580c;
   --color-accent-cyan: #0891b2;
-  --glass-bg: rgba(255, 255, 255, 0.78);
-  --glass-border: rgba(15, 23, 42, 0.08);
-  --shadow-glass: 0 8px 32px rgba(14, 116, 144, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(15, 23, 42, 0.12);
+  --shadow-glass: 0 8px 32px rgba(14, 116, 144, 0.12);
   --color-endfield-bg: #f8fafc;
-  --glass-endfield-bg: rgba(255, 255, 255, 0.65);
-  --glass-endfield-border: rgba(15, 23, 42, 0.08);
+  --glass-endfield-bg: rgba(255, 255, 255, 0.82);
+  --glass-endfield-border: rgba(15, 23, 42, 0.12);
   --glass-endfield-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 8px 32px rgba(14, 116, 144, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 8px 32px rgba(14, 116, 144, 0.1);
 
-  --fluid-fg: rgba(15, 23, 42, 0.92);
-  --fluid-fg-muted: rgba(15, 23, 42, 0.58);
-  --fluid-fg-dim: rgba(15, 23, 42, 0.38);
-  --fluid-border: rgba(15, 23, 42, 0.1);
-  --fluid-surface: rgba(255, 255, 255, 0.55);
-  --fluid-surface-hover: rgba(255, 255, 255, 0.78);
-  --fluid-glass-bg: rgba(255, 255, 255, 0.62);
-  --fluid-glass-border: rgba(15, 23, 42, 0.08);
-  --fluid-glass-inset: rgba(255, 255, 255, 0.85);
-  --fluid-glass-shadow: rgba(14, 116, 144, 0.1);
-  --fluid-grain-opacity: 0.055;
+  --fluid-fg: rgba(12, 18, 34, 0.94);
+  --fluid-fg-muted: rgba(12, 18, 34, 0.72);
+  --fluid-fg-dim: rgba(12, 18, 34, 0.52);
+  --fluid-border: rgba(12, 18, 34, 0.14);
+  --fluid-surface: rgba(255, 255, 255, 0.72);
+  --fluid-surface-hover: rgba(255, 255, 255, 0.9);
+  --fluid-glass-bg: rgba(255, 255, 255, 0.88);
+  --fluid-glass-border: rgba(12, 18, 34, 0.12);
+  --fluid-glass-inset: rgba(255, 255, 255, 0.95);
+  --fluid-glass-shadow: rgba(14, 116, 144, 0.14);
+  --fluid-grain-opacity: 0.04;
+
+  --work-card-bg: rgba(255, 255, 255, 0.9);
+  --work-card-border: rgba(12, 18, 34, 0.12);
+  --work-card-fg: rgba(12, 18, 34, 0.94);
+  --work-card-fg-muted: rgba(12, 18, 34, 0.68);
+  --work-card-fg-dim: rgba(12, 18, 34, 0.48);
+  --work-card-btn-bg: rgba(255, 255, 255, 0.75);
+  --work-card-hover-shadow: rgba(14, 116, 144, 0.16);
+
+  --cta-bg: transparent;
+  --cta-bg-hover: rgba(255, 255, 255, 0.55);
+  --cta-border: rgba(2, 132, 199, 0.45);
+  --cta-fg: rgba(12, 18, 34, 0.92);
 }
 
 @media (prefers-reduced-motion: reduce) {

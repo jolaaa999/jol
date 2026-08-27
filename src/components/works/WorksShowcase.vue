@@ -3,16 +3,38 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import gsap from 'gsap'
 import WorkCard from '@/components/works/WorkCard.vue'
 import { useGithubWorks } from '@/composables/useGithubWorks'
+import type { WorkProject } from '@/types/work'
 
 const sectionRef = ref<HTMLElement | null>(null)
 const { works, status } = useGithubWorks()
 
 const workCount = computed(() => works.value.length)
 
-function cardVariant(index: number): 'featured' | 'wide' | 'default' {
-  if (index === 0) return 'featured'
-  if (index === 1 || index === 4) return 'wide'
-  return 'default'
+/** 简介足够长才占双行大卡片，避免短文案大面积留白 */
+const FEATURED_DESC_MIN = 100
+const WIDE_DESC_MIN = 50
+
+interface CardLayout {
+  variant: 'featured' | 'wide' | 'default'
+  cellClass: string
+}
+
+function resolveCardLayout(index: number, work: WorkProject): CardLayout {
+  const descLen = (work.description ?? '').trim().length
+
+  if (index === 0 && descLen >= FEATURED_DESC_MIN) {
+    return { variant: 'featured', cellClass: 'works__cell--featured' }
+  }
+
+  if (index === 0) {
+    return { variant: 'wide', cellClass: 'works__cell--lead' }
+  }
+
+  if (descLen >= WIDE_DESC_MIN || index === 1 || index === 4) {
+    return { variant: 'wide', cellClass: 'works__cell--wide' }
+  }
+
+  return { variant: 'default', cellClass: '' }
 }
 
 function prefersReducedMotion(): boolean {
@@ -115,11 +137,8 @@ onMounted(() => {
         v-for="(work, index) in works"
         :key="work.id"
         :work="work"
-        :variant="cardVariant(index)"
-        :class="{
-          'works__cell--featured': index === 0,
-          'works__cell--wide': index === 1 || index === 4,
-        }"
+        :variant="resolveCardLayout(index, work).variant"
+        :class="resolveCardLayout(index, work).cellClass"
       />
     </div>
 
@@ -160,7 +179,7 @@ onMounted(() => {
   font-weight: 800;
   line-height: 0.96;
   letter-spacing: -0.035em;
-  color: rgba(255, 255, 255, 0.96);
+  color: var(--fluid-fg);
 }
 
 .works__lead {
@@ -170,7 +189,7 @@ onMounted(() => {
   font-size: clamp(0.8125rem, 1.5vw, 0.9rem);
   font-weight: 300;
   line-height: 1.8;
-  color: rgba(255, 255, 255, 0.44);
+  color: var(--fluid-fg-muted);
 }
 
 .works__intro-aside {
@@ -192,7 +211,7 @@ onMounted(() => {
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.04em;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--fluid-fg);
 }
 
 .works__stat-label {
@@ -200,7 +219,7 @@ onMounted(() => {
   font-size: 0.625rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.32);
+  color: var(--fluid-fg-dim);
 }
 
 .works__sync {
@@ -231,7 +250,7 @@ onMounted(() => {
   font-size: 0.625rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.36);
+  color: var(--fluid-fg-dim);
 }
 
 .works__rule {
@@ -255,12 +274,17 @@ onMounted(() => {
 }
 
 .works__mosaic > :deep(.works__cell--featured) {
-  grid-column: span 7;
+  grid-column: span 8;
   grid-row: span 2;
 }
 
+.works__mosaic > :deep(.works__cell--lead) {
+  grid-column: span 8;
+  grid-row: span 1;
+}
+
 .works__mosaic > :deep(.works__cell--wide) {
-  grid-column: span 5;
+  grid-column: span 4;
 }
 
 .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
@@ -281,13 +305,18 @@ onMounted(() => {
 }
 
 .works__skeleton--featured {
-  grid-column: span 7;
+  grid-column: span 8;
   grid-row: span 2;
   min-height: 20rem;
 }
 
-.works__skeleton--wide {
-  grid-column: span 5;
+.works__skeleton--wide,
+.works__skeleton--lead {
+  grid-column: span 4;
+}
+
+.works__skeleton--lead {
+  grid-row: span 1;
 }
 
 .works__footer {
@@ -301,9 +330,9 @@ onMounted(() => {
   align-items: center;
   gap: 0.65rem;
   padding: 0.75rem 1.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--fluid-border);
   border-radius: 999px;
-  background: rgba(8, 8, 16, 0.38);
+  background: var(--fluid-surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   font-family: var(--font-mono);
@@ -311,7 +340,7 @@ onMounted(() => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-decoration: none;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--fluid-fg-muted);
   transition:
     transform 0.35s var(--ease-mechanical),
     border-color 0.35s var(--ease-mechanical),
@@ -320,8 +349,8 @@ onMounted(() => {
 
 .works__github:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.18);
-  color: rgba(255, 255, 255, 0.88);
+  border-color: var(--fluid-border);
+  color: var(--fluid-fg);
 }
 
 .works__github-arrow {
@@ -348,18 +377,20 @@ onMounted(() => {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
-  .works__mosaic > :deep(.works__cell--featured) {
+  .works__mosaic > :deep(.works__cell--featured),
+  .works__mosaic > :deep(.works__cell--lead) {
     grid-column: span 6;
     grid-row: span 1;
     min-height: 16rem;
   }
 
   .works__mosaic > :deep(.works__cell--wide),
-  .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
+  .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide):not(.works__cell--lead)) {
     grid-column: span 3;
   }
 
-  .works__skeleton--featured {
+  .works__skeleton--featured,
+  .works__skeleton--lead {
     grid-column: span 6;
     grid-row: span 1;
   }

@@ -541,21 +541,19 @@ function scrollToWorks(): void {
 }
 
 .entry__cta--secondary {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--cta-border, var(--fluid-border));
+  background: var(--cta-bg, transparent);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  color: rgba(255, 255, 255, 0.82);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 6px 24px rgba(0, 0, 0, 0.18);
+  color: var(--cta-fg, rgba(255, 255, 255, 0.82));
+  box-shadow: none;
 }
 
 .entry__cta--secondary:hover {
   transform: translateY(-2px);
-  border-color: rgba(158, 216, 255, 0.35);
-  background: rgba(124, 140, 255, 0.1);
-  color: rgba(255, 255, 255, 0.94);
+  border-color: rgba(158, 216, 255, 0.45);
+  background: var(--cta-bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--cta-fg, rgba(255, 255, 255, 0.94));
 }
 
 .entry__cta-arrow--down {
@@ -585,20 +583,18 @@ function scrollToWorks(): void {
 }
 
 .entry__cta--primary {
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(8, 8, 16, 0.38);
+  border: 1px solid var(--cta-border, rgba(255, 255, 255, 0.18));
+  background: var(--cta-bg, transparent);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  color: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 8px 32px rgba(0, 0, 0, 0.28);
+  color: var(--cta-fg, rgba(255, 255, 255, 0.92));
+  box-shadow: none;
 }
 
 .entry__cta--primary:hover {
   transform: translateY(-2px);
-  background: rgba(12, 12, 22, 0.52);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--cta-bg-hover, rgba(255, 255, 255, 0.08));
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .entry__cta--ghost {
