@@ -3,7 +3,7 @@ import type { WorkProject } from '@/types/work'
 
 defineProps<{
   work: WorkProject
-  variant?: 'featured' | 'wide' | 'default'
+  variant?: 'compact' | 'default' | 'wide' | 'featured'
 }>()
 
 const LANG_TINT: Record<string, string> = {
@@ -70,7 +70,6 @@ function langTint(lang: string): string {
 <style scoped>
 .work-card {
   position: relative;
-  min-height: 11.5rem;
   border-radius: 4px;
   border: 1px solid var(--work-card-border);
   background: var(--work-card-bg);
@@ -130,9 +129,8 @@ function langTint(lang: string): string {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.35rem 1.4rem 1.3rem;
-  height: 100%;
+  gap: 0.65rem;
+  padding: 1.25rem 1.35rem 1.2rem;
 }
 
 .work-card__head {
@@ -168,7 +166,6 @@ function langTint(lang: string): string {
 
 .work-card__desc {
   margin: 0;
-  flex: 1;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-weight: 300;
@@ -185,8 +182,7 @@ function langTint(lang: string): string {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin-top: auto;
-  padding-top: 0.75rem;
+  padding-top: 0.35rem;
 }
 
 .work-card__btn {
@@ -242,49 +238,45 @@ function langTint(lang: string): string {
   color: rgba(240, 171, 252, 0.75);
 }
 
-/* ── Featured：双列布局，简介居右填充空间 ── */
-.work-card--featured {
-  min-height: 18rem;
+/* ── 尺寸档位：仅调字号与行数，内部保持纵向堆叠 ── */
+.work-card--compact .work-card__body {
+  gap: 0.5rem;
+  padding: 1rem 1.15rem 1rem;
+}
+
+.work-card--compact .work-card__title {
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+}
+
+.work-card--compact .work-card__desc {
+  -webkit-line-clamp: 2;
+}
+
+.work-card--wide .work-card__body {
+  padding: 1.35rem 1.5rem 1.25rem;
+}
+
+.work-card--wide .work-card__title {
+  font-size: clamp(1.35rem, 2.8vw, 1.85rem);
+}
+
+.work-card--wide .work-card__desc {
+  -webkit-line-clamp: 4;
 }
 
 .work-card--featured .work-card__body {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  grid-template-rows: auto auto 1fr;
-  column-gap: clamp(1.25rem, 3vw, 2.5rem);
-  row-gap: 0.85rem;
-  align-content: start;
-  padding: clamp(1.5rem, 3vw, 2.25rem);
-}
-
-.work-card--featured .work-card__head {
-  grid-column: 1;
-  grid-row: 1;
+  gap: 0.75rem;
+  padding: clamp(1.35rem, 3vw, 2rem);
 }
 
 .work-card--featured .work-card__title {
-  grid-column: 1;
-  grid-row: 2;
-  font-size: clamp(1.75rem, 4vw, 2.75rem);
-  max-width: none;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
 }
 
 .work-card--featured .work-card__desc {
-  grid-column: 2;
-  grid-row: 1 / 4;
-  align-self: center;
   font-size: 0.875rem;
   line-height: 1.85;
-  max-width: none;
   -webkit-line-clamp: 6;
-}
-
-.work-card--featured .work-card__actions {
-  grid-column: 1;
-  grid-row: 3;
-  align-self: end;
-  margin-top: 0;
-  padding-top: 0;
 }
 
 .work-card--featured .work-card__glow {
@@ -293,66 +285,7 @@ function langTint(lang: string): string {
   opacity: 0.25;
 }
 
-/* ── Wide / Lead：横向舒展，单行高度 ── */
-.work-card--wide {
-  min-height: 11.5rem;
-}
-
-.work-card--wide .work-card__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
-  grid-template-rows: auto 1fr auto;
-  column-gap: 1.5rem;
-  row-gap: 0.65rem;
-  padding: 1.35rem 1.5rem;
-}
-
-.work-card--wide .work-card__head {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.work-card--wide .work-card__title {
-  grid-column: 1;
-  grid-row: 2;
-  align-self: start;
-  font-size: clamp(1.35rem, 2.8vw, 1.85rem);
-}
-
-.work-card--wide .work-card__desc {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  align-self: center;
-  -webkit-line-clamp: 4;
-}
-
-.work-card--wide .work-card__actions {
-  grid-column: 1 / -1;
-  grid-row: 3;
-  margin-top: 0;
-  padding-top: 0.5rem;
-}
-
 @media (max-width: 620px) {
-  .work-card--featured,
-  .work-card--wide {
-    min-height: auto;
-  }
-
-  .work-card--featured .work-card__body,
-  .work-card--wide .work-card__body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-    padding: 1.25rem 1.3rem;
-  }
-
-  .work-card--featured .work-card__desc,
-  .work-card--wide .work-card__desc {
-    align-self: auto;
-    -webkit-line-clamp: 3;
-  }
-
   .work-card__actions {
     flex-direction: column;
     align-items: stretch;

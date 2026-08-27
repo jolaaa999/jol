@@ -10,32 +10,37 @@ const { works, status } = useGithubWorks()
 
 const workCount = computed(() => works.value.length)
 
-/** 简介足够长才占双行大卡片，避免短文案大面积留白 */
-const FEATURED_DESC_MIN = 100
-const WIDE_DESC_MIN = 50
+/** 仅按简介长度分配网格占位，不改变卡片内部纵向结构 */
+const DESC_COMPACT_MAX = 44
+const DESC_WIDE_MIN = 88
+const DESC_FEATURED_MIN = 120
 
 interface CardLayout {
-  variant: 'featured' | 'wide' | 'default'
+  variant: 'compact' | 'default' | 'wide' | 'featured'
   cellClass: string
 }
 
 function resolveCardLayout(index: number, work: WorkProject): CardLayout {
   const descLen = (work.description ?? '').trim().length
 
-  if (index === 0 && descLen >= FEATURED_DESC_MIN) {
+  if (index === 0 && descLen >= DESC_FEATURED_MIN) {
     return { variant: 'featured', cellClass: 'works__cell--featured' }
   }
 
-  if (index === 0) {
-    return { variant: 'wide', cellClass: 'works__cell--lead' }
+  if (descLen <= DESC_COMPACT_MAX) {
+    return { variant: 'compact', cellClass: 'works__cell--compact' }
   }
 
-  if (descLen >= WIDE_DESC_MIN || index === 1 || index === 4) {
+  if (descLen >= DESC_WIDE_MIN) {
     return { variant: 'wide', cellClass: 'works__cell--wide' }
   }
 
   return { variant: 'default', cellClass: '' }
 }
+
+const workLayouts = computed(() =>
+  works.value.map((work, index) => resolveCardLayout(index, work)),
+)
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -137,8 +142,8 @@ onMounted(() => {
         v-for="(work, index) in works"
         :key="work.id"
         :work="work"
-        :variant="resolveCardLayout(index, work).variant"
-        :class="resolveCardLayout(index, work).cellClass"
+        :variant="workLayouts[index]!.variant"
+        :class="workLayouts[index]!.cellClass"
       />
     </div>
 
@@ -269,8 +274,9 @@ onMounted(() => {
 .works__mosaic {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: minmax(11.5rem, auto);
+  grid-auto-rows: auto;
   gap: 0.75rem;
+  align-items: start;
 }
 
 .works__mosaic > :deep(.works__cell--featured) {
@@ -278,15 +284,11 @@ onMounted(() => {
   grid-row: span 2;
 }
 
-.works__mosaic > :deep(.works__cell--lead) {
-  grid-column: span 8;
-  grid-row: span 1;
-}
-
 .works__mosaic > :deep(.works__cell--wide) {
-  grid-column: span 4;
+  grid-column: span 8;
 }
 
+.works__mosaic > :deep(.works__cell--compact),
 .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
   grid-column: span 4;
 }
@@ -297,7 +299,7 @@ onMounted(() => {
 
 .works__skeleton {
   grid-column: span 4;
-  min-height: 11.5rem;
+  min-height: 9rem;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.025);
@@ -307,16 +309,11 @@ onMounted(() => {
 .works__skeleton--featured {
   grid-column: span 8;
   grid-row: span 2;
-  min-height: 20rem;
+  min-height: 16rem;
 }
 
-.works__skeleton--wide,
-.works__skeleton--lead {
-  grid-column: span 4;
-}
-
-.works__skeleton--lead {
-  grid-row: span 1;
+.works__skeleton--wide {
+  grid-column: span 8;
 }
 
 .works__footer {
@@ -378,19 +375,18 @@ onMounted(() => {
   }
 
   .works__mosaic > :deep(.works__cell--featured),
-  .works__mosaic > :deep(.works__cell--lead) {
+  .works__mosaic > :deep(.works__cell--wide) {
     grid-column: span 6;
     grid-row: span 1;
-    min-height: 16rem;
   }
 
-  .works__mosaic > :deep(.works__cell--wide),
-  .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide):not(.works__cell--lead)) {
+  .works__mosaic > :deep(.works__cell--compact),
+  .works__mosaic > :deep(.work-card:not(.works__cell--featured):not(.works__cell--wide)) {
     grid-column: span 3;
   }
 
   .works__skeleton--featured,
-  .works__skeleton--lead {
+  .works__skeleton--wide {
     grid-column: span 6;
     grid-row: span 1;
   }
