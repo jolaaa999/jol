@@ -1,10 +1,24 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import type { WorkProject } from '@/types/work'
 
-defineProps<{
+const props = defineProps<{
   work: WorkProject
   size?: 'sm' | 'lg'
 }>()
+
+const imageLoaded = ref(false)
+const imageFailed = ref(false)
+
+const previewSrc = computed(() => `/works/previews/${props.work.id}.webp`)
+const showImage = computed(() => imageLoaded.value && !imageFailed.value)
+
+function resetImageState(): void {
+  imageLoaded.value = false
+  imageFailed.value = false
+}
+
+watch(() => props.work.id, resetImageState)
 
 const LANG_HUE: Record<string, number> = {
   TypeScript: 215,
@@ -24,13 +38,25 @@ function langHue(lang: string): number {
 <template>
   <div
     class="archive-preview"
-    :class="`archive-preview--${size ?? 'sm'}`"
+    :class="[`archive-preview--${size ?? 'sm'}`, { 'has-image': showImage }]"
     :style="{ '--preview-hue': langHue(work.language) }"
     aria-hidden="true"
   >
-    <div class="archive-preview__grid" />
-    <div class="archive-preview__scan" />
-    <span class="archive-preview__glyph">{{ work.name.slice(0, 2).toUpperCase() }}</span>
+    <img
+      class="archive-preview__shot"
+      :src="previewSrc"
+      :alt="`${work.name} preview`"
+      loading="lazy"
+      decoding="async"
+      @load="imageLoaded = true"
+      @error="imageFailed = true"
+    />
+
+    <div v-if="!showImage" class="archive-preview__fallback">
+      <div class="archive-preview__grid" />
+      <div class="archive-preview__scan" />
+      <span class="archive-preview__glyph">{{ work.name.slice(0, 2).toUpperCase() }}</span>
+    </div>
   </div>
 </template>
 
@@ -53,6 +79,26 @@ function langHue(lang: string): number {
   width: 100%;
   min-height: clamp(12rem, 28vh, 18rem);
   aspect-ratio: 4 / 3;
+}
+
+.archive-preview__shot {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  opacity: 0;
+  transition: opacity 0.45s var(--arch-ease, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+.archive-preview.has-image .archive-preview__shot {
+  opacity: 1;
+}
+
+.archive-preview__fallback {
+  position: absolute;
+  inset: 0;
 }
 
 .archive-preview__grid {
