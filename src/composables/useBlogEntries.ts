@@ -35,15 +35,20 @@ const FALLBACK_ENTRIES: BlogEntry[] = [
   },
 ]
 
+function normalizeTags(tags: ArticleApiItem['tags']): string[] {
+  if (!Array.isArray(tags)) return []
+  return tags.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+}
+
 function toEntry(article: ArticleApiItem): BlogEntry {
-  const content = article.content
+  const content = article.content ?? ''
   return {
     id: article.id,
-    title: article.title,
+    title: article.title ?? 'Untitled',
     excerpt: content.replace(/\n/g, ' ').replace(/#+\s/g, '').slice(0, 96),
     content,
-    date: article.created_at.slice(0, 10),
-    tags: article.tags ?? [],
+    date: (article.created_at ?? '').slice(0, 10),
+    tags: normalizeTags(article.tags),
     readingMinutes: estimateReadingMinutes(content),
   }
 }
@@ -78,7 +83,9 @@ export function useBlogEntries() {
   const allTags = computed(() => {
     const set = new Set<string>()
     for (const e of entries.value) {
-      for (const t of e.tags) set.add(t)
+      for (const t of e.tags ?? []) {
+        if (t) set.add(t)
+      }
     }
     return [...set].sort()
   })
@@ -88,20 +95,21 @@ export function useBlogEntries() {
   }
 
   function getByTag(tag: string): BlogEntry[] {
-    const normalized = tag.toLowerCase()
+    const normalized = (tag ?? '').trim().toLowerCase()
+    if (!normalized) return []
     return entries.value.filter((e) =>
-      e.tags.some((t) => t.toLowerCase() === normalized),
+      (e.tags ?? []).some((t) => (t ?? '').toLowerCase() === normalized),
     )
   }
 
   function search(query: string): BlogEntry[] {
-    const q = query.trim().toLowerCase()
+    const q = (query ?? '').trim().toLowerCase()
     if (!q) return entries.value
     return entries.value.filter(
       (e) =>
-        e.title.toLowerCase().includes(q) ||
-        e.excerpt.toLowerCase().includes(q) ||
-        e.tags.some((t) => t.toLowerCase().includes(q)),
+        (e.title ?? '').toLowerCase().includes(q) ||
+        (e.excerpt ?? '').toLowerCase().includes(q) ||
+        (e.tags ?? []).some((t) => (t ?? '').toLowerCase().includes(q)),
     )
   }
 

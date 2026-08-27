@@ -25,7 +25,11 @@ async function submit(): Promise<void> {
 
     if (!res.ok) {
       status.value = 'error'
-      message.value = data.message || '订阅失败，请稍后重试或直接邮件联系。'
+      message.value =
+        data.message ||
+        (res.status === 502
+          ? '邮件服务连接失败，请检查 Vercel 环境变量后重新部署。'
+          : '订阅失败，请稍后重试或直接邮件联系。')
       return
     }
 

@@ -19,10 +19,6 @@ type NewsletterResult struct {
 }
 
 // SubscribeNewsletter 按环境变量对接邮件服务
-// 支持：
-//   NEWSLETTER_PROVIDER=resend|buttondown（可省略，自动检测）
-//   RESEND_API_KEY / RESEND_FROM_EMAIL / RESEND_SEGMENT_ID / NEWSLETTER_NOTIFY_TO
-//   BUTTONDOWN_API_KEY
 func SubscribeNewsletter(email string) (NewsletterResult, int, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if _, err := mail.ParseAddress(email); err != nil {
@@ -32,9 +28,9 @@ func SubscribeNewsletter(email string) (NewsletterResult, int, error) {
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("NEWSLETTER_PROVIDER")))
 	if provider == "" {
 		switch {
-		case os.Getenv("RESEND_API_KEY") != "":
+		case strings.TrimSpace(os.Getenv("RESEND_API_KEY")) != "":
 			provider = "resend"
-		case os.Getenv("BUTTONDOWN_API_KEY") != "":
+		case strings.TrimSpace(os.Getenv("BUTTONDOWN_API_KEY")) != "":
 			provider = "buttondown"
 		default:
 			return NewsletterResult{}, http.StatusServiceUnavailable, fmt.Errorf("not_configured")
@@ -61,7 +57,7 @@ func SubscribeNewsletter(email string) (NewsletterResult, int, error) {
 }
 
 func subscribeResend(email string) error {
-	apiKey := os.Getenv("RESEND_API_KEY")
+	apiKey := strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
 	if apiKey == "" {
 		return fmt.Errorf("missing_resend_api_key")
 	}
@@ -70,42 +66,39 @@ func subscribeResend(email string) error {
 		"email":        email,
 		"unsubscribed": false,
 	}
-	if segmentID := strings.TrimSpace(os.Getenv("RESEND_SEGMENT_ID")); segmentID != "" {
+
+	segmentID := strings.TrimSpace(os.Getenv("RESEND_SEGMENT_ID"))
+	if segmentID != "" {
 		contactBody["segments"] = []map[string]string{{"id": segmentID}}
 	}
 
-	if err := resendRequest("POST", "https://api.resend.com/contacts", apiKey, contactBody); err != nil {
-		// 已存在视为成功（幂等）
-		if !strings.Contains(err.Error(), "already exists") &&
-			!strings.Contains(err.Error(), "409") &&
-			!strings.Contains(err.Error(), "contact_already_exists") {
-			return err
-		}
+	err := resendRequest("POST", "https://api.resend.com/contacts", apiKey, contactBody)
+	if err != nil && segmentID != "" && isResendContactError(err) {
+		// Segment 配置错误时，降级为仅创建联系人
+		delete(contactBody, "segments")
+		err = resendRequest("POST", "https://api.resend.com/contacts", apiKey, contactBody)
+	}
+	if err != nil && !isResendDuplicate(err) {
+		return err
 	}
 
-	from := strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL"))
-	if from == "" {
-		from = "JOL <onboarding@resend.dev>"
-	}
-
+	from := normalizeFromEmail(os.Getenv("RESEND_FROM_EMAIL"))
 	siteURL := strings.TrimSpace(os.Getenv("SITE_URL"))
 	if siteURL == "" {
 		siteURL = "https://jol-ten.vercel.app"
 	}
 
+	// 欢迎信失败不阻断订阅（联系人已入库）
 	_ = resendRequest("POST", "https://api.resend.com/emails", apiKey, map[string]any{
 		"from":    from,
 		"to":      []string{email},
 		"subject": "欢迎订阅 JOL Newsletter",
-		"html": fmt.Sprintf(`
-			<div style="font-family:ui-monospace,monospace;line-height:1.7;color:#111">
-			  <p>你好，</p>
-			  <p>你已成功订阅 <strong>JOL</strong> 的 Newsletter。</p>
-			  <p>之后有新文章时会邮件通知你（低频，无垃圾邮件）。</p>
-			  <p><a href="%s/blog">阅读博客 →</a></p>
-			  <p style="color:#666;font-size:12px">若非本人操作，可忽略本邮件。</p>
-			</div>
-		`, siteURL),
+		"html": fmt.Sprintf(`<div style="font-family:ui-monospace,monospace;line-height:1.7;color:#111">
+<p>你好，</p>
+<p>你已成功订阅 <strong>JOL</strong> 的 Newsletter。</p>
+<p>之后有新文章时会邮件通知你。</p>
+<p><a href="%s/blog">阅读博客 →</a></p>
+</div>`, siteURL),
 	})
 
 	if notifyTo := strings.TrimSpace(os.Getenv("NEWSLETTER_NOTIFY_TO")); notifyTo != "" {
@@ -120,8 +113,41 @@ func subscribeResend(email string) error {
 	return nil
 }
 
+func normalizeFromEmail(raw string) string {
+	from := strings.TrimSpace(raw)
+	from = strings.Trim(from, `"'`)
+	if from == "" {
+		return "JOL <onboarding@resend.dev>"
+	}
+	if !strings.Contains(from, "<") && strings.Contains(from, "@") {
+		return fmt.Sprintf("JOL <%s>", from)
+	}
+	return from
+}
+
+func isResendDuplicate(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "contact_already_exists") ||
+		strings.Contains(msg, "409") ||
+		strings.Contains(msg, "duplicate")
+}
+
+func isResendContactError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "segment") ||
+		strings.Contains(msg, "422") ||
+		strings.Contains(msg, "validation")
+}
+
 func subscribeButtondown(email string) error {
-	apiKey := os.Getenv("BUTTONDOWN_API_KEY")
+	apiKey := strings.TrimSpace(os.Getenv("BUTTONDOWN_API_KEY"))
 	if apiKey == "" {
 		return fmt.Errorf("missing_buttondown_api_key")
 	}
@@ -142,7 +168,6 @@ func subscribeButtondown(email string) error {
 	defer res.Body.Close()
 
 	raw, _ := io.ReadAll(res.Body)
-	// 201 created / 200 ok / 409 already subscribed
 	if res.StatusCode >= 200 && res.StatusCode < 300 {
 		return nil
 	}

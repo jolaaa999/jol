@@ -4,7 +4,7 @@ export const SITE = {
   title: 'JOL — Developer & Creator',
   description:
     'Developer & creator building digital experiences with technical precision and fluid aesthetics. Blog, works, and reflections.',
-  url: 'https://jol.vercel.app',
+  url: 'https://jol-ten.vercel.app',
   locale: 'zh-CN',
   author: {
     name: 'JOL',
@@ -22,9 +22,9 @@ export const SITE = {
   },
   giscus: {
     repo: 'jolaaa999/jol',
-    repoId: '',
+    repoId: 'R_kgDOS808nA',
     category: 'Announcements',
-    categoryId: '',
+    categoryId: 'DIC_kwDOS808nM4DERgj',
     mapping: 'pathname',
     theme: 'dark_dimmed',
   },

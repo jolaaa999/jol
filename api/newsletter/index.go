@@ -49,6 +49,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		default:
 			if strings.Contains(err.Error(), "missing_") {
 				msg = "邮件服务密钥未配置"
+			} else if strings.Contains(err.Error(), "resend_401") || strings.Contains(err.Error(), "resend_403") {
+				msg = "Resend API Key 无效，请在 Vercel 检查 RESEND_API_KEY"
+			} else if strings.Contains(err.Error(), "resend_") {
+				msg = "邮件服务暂时不可用，请稍后重试"
 			}
 		}
 		lib.WriteJSON(w, status, lib.ErrorResponse{
