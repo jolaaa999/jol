@@ -1,157 +1,83 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import gsap from 'gsap'
-import WorkCard from '@/components/works/WorkCard.vue'
 import { useGithubWorks } from '@/composables/useGithubWorks'
 import type { WorkProject } from '@/types/work'
+import ArchiveHeader from '@/components/works/archive/ArchiveHeader.vue'
+import ArchiveIndex from '@/components/works/archive/ArchiveIndex.vue'
+import ArchiveFeatured from '@/components/works/archive/ArchiveFeatured.vue'
+import ArchiveWorkRow from '@/components/works/archive/ArchiveWorkRow.vue'
+import '@/styles/archive.css'
 
 const sectionRef = ref<HTMLElement | null>(null)
+const activeId = ref<string>()
 const { works, status } = useGithubWorks()
 
 const workCount = computed(() => works.value.length)
 
-/** Bento 网格：按内容分配 4 / 6 / 8 列，保留适度留白，避免大面积空洞 */
-const GRID_COLS = 12
-/** 行末允许保留的留白列数（约 1/4 宽），超出才扩展末卡 */
-const MAX_ROW_GAP = 3
-const DESC_COMPACT_MAX = 44
-const DESC_WIDE_MIN = 88
-const DESC_FEATURED_MIN = 120
-const DESC_TALL_MIN = 96
+/** 按 stars / demo / 描述长度选取 Featured，不改变数据源 */
+function pickFeaturedIndex(list: WorkProject[]): number {
+  if (!list.length) return -1
 
-type CardVariant = 'compact' | 'default' | 'wide' | 'featured'
+  let best = 0
+  let bestScore = -1
 
-interface PackedLayout {
-  variant: CardVariant
-  colSpan: number
-  rowSpan: number
-  colSpanMd: number
+  list.forEach((work, i) => {
+    const score =
+      work.stars * 20 +
+      (work.demoUrl ? 15 : 0) +
+      Math.min(work.description.length, 120) / 4
+    if (score > bestScore) {
+      bestScore = score
+      best = i
+    }
+  })
+
+  return best
 }
 
-function toMdSpan(colSpan: number): number {
-  return Math.max(3, Math.min(6, Math.round((colSpan / GRID_COLS) * 6)))
-}
+const featuredIndex = computed(() => pickFeaturedIndex(works.value))
 
-function preferredLayout(index: number, work: WorkProject): PackedLayout {
-  const descLen = (work.description ?? '').trim().length
+const featuredWork = computed(() => {
+  const i = featuredIndex.value
+  return i >= 0 ? works.value[i] : undefined
+})
 
-  if (index === 0 && descLen >= DESC_FEATURED_MIN) {
-    return { variant: 'featured', colSpan: 8, rowSpan: 2, colSpanMd: 6 }
-  }
+const selectedWorks = computed(() =>
+  works.value.filter((_, i) => i !== featuredIndex.value),
+)
 
-  if (descLen <= DESC_COMPACT_MAX) {
-    return { variant: 'compact', colSpan: 4, rowSpan: 1, colSpanMd: 3 }
-  }
-
-  if (descLen >= DESC_WIDE_MIN) {
-    return {
-      variant: 'wide',
-      colSpan: 8,
-      rowSpan: descLen >= DESC_TALL_MIN ? 2 : 1,
-      colSpanMd: 6,
-    }
-  }
-
-  return { variant: 'default', colSpan: 6, rowSpan: 1, colSpanMd: 4 }
-}
-
-/** 行末适度吸收留白：保留 MAX_ROW_GAP 列呼吸感，仅消除过大空洞 */
-function packWorkLayouts(works: WorkProject[]): PackedLayout[] {
-  const packed: PackedLayout[] = []
-  let rowFill = 0
-  let rowIndices: number[] = []
-
-  const finalizeRow = (): void => {
-    const remaining = GRID_COLS - rowFill
-    if (remaining > MAX_ROW_GAP && rowIndices.length > 0) {
-      const last = packed[rowIndices[rowIndices.length - 1]!]!
-      last.colSpan += remaining - MAX_ROW_GAP
-      last.colSpanMd = toMdSpan(last.colSpan)
-      if (last.colSpan >= 8 && last.variant !== 'featured') {
-        last.variant = 'wide'
-      } else if (last.colSpan >= 6 && last.variant === 'compact') {
-        last.variant = 'default'
-      }
-    }
-    rowFill = 0
-    rowIndices = []
-  }
-
-  for (let i = 0; i < works.length; i++) {
-    const layout = { ...preferredLayout(i, works[i]!) }
-
-    if (rowFill + layout.colSpan > GRID_COLS) {
-      finalizeRow()
-    }
-
-    packed.push(layout)
-    rowIndices.push(packed.length - 1)
-    rowFill += layout.colSpan
-
-    const next = i < works.length - 1 ? preferredLayout(i + 1, works[i + 1]!) : null
-    const nextFits = next !== null && rowFill + next.colSpan <= GRID_COLS
-
-    if (rowFill === GRID_COLS || !nextFits) {
-      finalizeRow()
-    }
-  }
-
-  if (rowIndices.length) finalizeRow()
-
-  return packed
-}
-
-const workLayouts = computed(() => packWorkLayouts(works.value))
-
-function workCardStyle(layout: PackedLayout): Record<string, string | number> {
-  return {
-    '--work-col-span': layout.colSpan,
-    '--work-col-span-md': layout.colSpanMd,
-    '--work-row-span': layout.rowSpan,
-  }
+function scrollToWork(id: string): void {
+  activeId.value = id
+  document.getElementById(`work-${id}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'nearest',
+  })
 }
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** 区块入场：标题错落 → 分隔线展开 → 卡片模糊浮现 */
 function playSectionEntrance(): void {
   if (!sectionRef.value) return
 
-  const header = sectionRef.value.querySelector('[data-works-header]')
-  const rule = sectionRef.value.querySelector('[data-works-rule]')
-  const cards = sectionRef.value.querySelectorAll('[data-work-card]')
+  const blocks = sectionRef.value.querySelectorAll('[data-archive-block]')
 
   if (prefersReducedMotion()) {
-    gsap.set([header, rule, cards], { opacity: 1, y: 0, scaleX: 1, filter: 'none' })
+    gsap.set(blocks, { opacity: 1, y: 0 })
     return
   }
 
-  gsap.set(header, { y: 32, opacity: 0 })
-  gsap.set(rule, { scaleX: 0, transformOrigin: 'left center' })
-  gsap.set(cards, { y: 36, opacity: 0, filter: 'blur(10px)' })
-
-  const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
-
-  tl.to(header, { y: 0, opacity: 1, duration: 0.82 }, 0)
-    .to(rule, { scaleX: 1, duration: 0.9, ease: 'expo.out' }, 0.18)
-    .to(
-      cards,
-      {
-        y: 0,
-        opacity: 1,
-        filter: 'blur(0px)',
-        duration: 0.78,
-        stagger: {
-          each: 0.07,
-          from: 'start',
-          ease: 'power2.out',
-        },
-        clearProps: 'filter',
-      },
-      0.32,
-    )
+  gsap.set(blocks, { y: 28, opacity: 0 })
+  gsap.to(blocks, {
+    y: 0,
+    opacity: 1,
+    duration: 0.85,
+    stagger: 0.1,
+    ease: 'power3.out',
+    clearProps: 'transform',
+  })
 }
 
 watch(
@@ -172,311 +98,219 @@ onMounted(() => {
 </script>
 
 <template>
-  <section ref="sectionRef" id="works" class="works" aria-labelledby="works-title">
-    <header class="works__intro" data-works-header>
-      <div class="works__intro-copy">
-        <h2 id="works-title" class="works__title">作品档案</h2>
-        <p class="works__lead">
-          从 GitHub 同步的实验与产品。界面、工具，以及一些仍在成形中的想法。
-        </p>
-      </div>
+  <section
+    ref="sectionRef"
+    id="works"
+    class="archive"
+    aria-labelledby="works-title"
+  >
+    <div class="archive__ambient" aria-hidden="true" />
 
-      <div class="works__intro-aside">
-        <div class="works__stat">
-          <span class="works__stat-value">{{ workCount }}</span>
-          <span class="works__stat-label">projects indexed</span>
-        </div>
-        <div class="works__sync" aria-label="作品同步状态">
-          <span class="works__sync-dot" :class="status" />
-          <span class="works__sync-text">
-            {{ status === 'synced' ? 'github synced' : status === 'loading' ? 'syncing' : 'local cache' }}
-          </span>
-        </div>
-      </div>
-    </header>
-
-    <div class="works__rule" data-works-rule aria-hidden="true" />
-
-    <div v-if="status === 'loading'" class="works__mosaic works__mosaic--loading">
-      <div class="works__skeleton works__skeleton--featured" />
-      <div class="works__skeleton works__skeleton--wide" />
-      <div class="works__skeleton" />
-      <div class="works__skeleton" />
-      <div class="works__skeleton works__skeleton--wide" />
-      <div class="works__skeleton" />
-    </div>
-
-    <div v-else class="works__mosaic">
-      <WorkCard
-        v-for="(work, index) in works"
-        :key="work.id"
-        :work="work"
-        :variant="workLayouts[index]!.variant"
-        :style="workCardStyle(workLayouts[index]!)"
+    <div class="archive__inner">
+      <ArchiveHeader
+        data-archive-block
+        :count="workCount"
+        :status="status"
       />
-    </div>
 
-    <footer class="works__footer">
-      <a
-        class="works__github"
-        href="https://github.com/jolaaa999"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <span>浏览 GitHub 全部仓库</span>
-        <span class="works__github-arrow" aria-hidden="true">↗</span>
-      </a>
-    </footer>
+      <template v-if="status === 'loading'">
+        <div class="archive-loading" data-archive-block aria-hidden="true">
+          <div class="archive-loading__line archive-loading__line--long" />
+          <div class="archive-loading__line" />
+          <div class="archive-loading__line archive-loading__line--short" />
+          <div class="archive-loading__gap" />
+          <div class="archive-loading__line archive-loading__line--featured" />
+          <div class="archive-loading__line" />
+          <div class="archive-loading__line archive-loading__line--short" />
+        </div>
+      </template>
+
+      <template v-else-if="works.length">
+        <ArchiveIndex
+          data-archive-block
+          :works="works"
+          :active-id="activeId"
+          @select="scrollToWork"
+        />
+
+        <ArchiveFeatured
+          v-if="featuredWork"
+          data-archive-block
+          :work="featuredWork"
+          :index="featuredIndex"
+        />
+
+        <section
+          v-if="selectedWorks.length"
+          class="archive-selected"
+          data-archive-block
+          aria-label="精选作品"
+        >
+          <header class="archive-selected__head">
+            <p class="archive-selected__label">Selected Works</p>
+            <div class="archive-selected__rule" aria-hidden="true" />
+          </header>
+
+          <div class="archive-selected__list">
+            <ArchiveWorkRow
+              v-for="work in selectedWorks"
+              :key="work.id"
+              :work="work"
+              :index="works.findIndex((w) => w.id === work.id)"
+            />
+          </div>
+        </section>
+      </template>
+
+      <footer class="archive-footer" data-archive-block>
+        <p class="archive-footer__label">External Archive</p>
+        <a
+          class="archive-footer__link"
+          href="https://github.com/jolaaa999"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Browse All Repositories ↗
+        </a>
+      </footer>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.works {
+.archive {
   position: relative;
   z-index: 5;
-  max-width: var(--content-max);
+  color: var(--arch-fg);
+}
+
+.archive__ambient {
+  position: absolute;
+  inset: -8% -4%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 50% 40% at 85% 12%, rgba(113, 135, 255, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 35% at 10% 88%, rgba(154, 124, 255, 0.05) 0%, transparent 50%);
+}
+
+.archive__inner {
+  position: relative;
+  max-width: var(--arch-max);
   margin: 0 auto;
   padding: clamp(4rem, 10vh, 6.5rem) clamp(1.5rem, 4vw, 2.75rem) clamp(5rem, 12vh, 7rem);
 }
 
-.works__intro {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(10rem, 0.35fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  align-items: end;
-  margin-bottom: 1.75rem;
+/* ── Selected Works ── */
+.archive-selected {
+  margin-bottom: clamp(4rem, 10vh, 6rem);
 }
 
-.works__title {
-  margin: 0 0 0.85rem;
-  font-size: clamp(2.5rem, 6.5vw, 4.25rem);
-  font-weight: 800;
-  line-height: 0.96;
-  letter-spacing: -0.035em;
-  color: var(--fluid-fg);
+.archive-selected__head {
+  margin-bottom: clamp(2rem, 5vh, 3rem);
 }
 
-.works__lead {
-  margin: 0;
-  max-width: 28rem;
-  font-family: var(--font-mono);
-  font-size: clamp(0.8125rem, 1.5vw, 0.9rem);
-  font-weight: 300;
-  line-height: 1.8;
-  color: var(--fluid-fg-muted);
-}
-
-.works__intro-aside {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1.25rem;
-  text-align: right;
-}
-
-.works__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.works__stat-value {
-  font-size: clamp(2.5rem, 5vw, 3.5rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--fluid-fg);
-}
-
-.works__stat-label {
+.archive-selected__label {
+  margin: 0 0 1rem;
   font-family: var(--font-mono);
   font-size: 0.625rem;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--fluid-fg-dim);
+  color: var(--arch-meta);
 }
 
-.works__sync {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.works__sync-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.works__sync-dot.synced {
-  background: #9ed8ff;
-  box-shadow: 0 0 10px rgba(158, 216, 255, 0.55);
-}
-
-.works__sync-dot.loading {
-  background: #c084fc;
-  animation: works-pulse 1.2s ease-in-out infinite;
-}
-
-.works__sync-text {
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--fluid-fg-dim);
-}
-
-.works__rule {
+.archive-selected__rule {
   height: 1px;
-  margin-bottom: clamp(1.75rem, 4vh, 2.5rem);
-  background: linear-gradient(
-    90deg,
-    rgba(158, 216, 255, 0.55) 0%,
-    rgba(192, 132, 252, 0.35) 42%,
-    rgba(255, 255, 255, 0.06) 100%
-  );
-  transform-origin: left center;
+  background: var(--arch-border);
 }
 
-/* ── Bento 马赛克网格 ── */
-.works__mosaic {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-flow: dense;
-  grid-auto-rows: auto;
-  gap: 0.75rem;
-  align-items: start;
-}
-
-.works__mosaic > :deep(.work-card) {
-  grid-column: span var(--work-col-span, 4);
-  grid-row: span var(--work-row-span, 1);
-}
-
-.works__mosaic--loading {
-  pointer-events: none;
-}
-
-.works__skeleton {
-  grid-column: span 4;
-  min-height: 9rem;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
-  animation: works-pulse 1.5s ease-in-out infinite;
-}
-
-.works__skeleton--featured {
-  grid-column: span 8;
-  grid-row: span 2;
-  min-height: 16rem;
-}
-
-.works__skeleton--wide {
-  grid-column: span 8;
-}
-
-.works__footer {
-  margin-top: clamp(2.5rem, 5vh, 3.5rem);
+/* ── Footer ── */
+.archive-footer {
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: clamp(2.5rem, 5vh, 3.5rem);
+  border-top: 1px solid var(--arch-border);
 }
 
-.works__github {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.75rem 1.35rem;
-  border: 1px solid var(--fluid-border);
-  border-radius: 999px;
-  background: var(--fluid-surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+.archive-footer__label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--arch-meta);
+}
+
+.archive-footer__link {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   text-decoration: none;
-  color: var(--fluid-fg-muted);
+  color: var(--arch-fg-muted);
   transition:
-    transform 0.35s var(--ease-mechanical),
-    border-color 0.35s var(--ease-mechanical),
-    color 0.35s var(--ease-mechanical);
+    color 0.35s var(--arch-ease),
+    transform 0.35s var(--arch-ease);
 }
 
-.works__github:hover {
-  transform: translateY(-2px);
-  border-color: var(--fluid-border);
-  color: var(--fluid-fg);
+.archive-footer__link:hover {
+  color: var(--arch-accent);
+  transform: translateX(4px);
 }
 
-.works__github-arrow {
-  transition: transform 0.35s var(--ease-mechanical);
+/* ── Loading ── */
+.archive-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
-.works__github:hover .works__github-arrow {
-  transform: translate(2px, -2px);
+.archive-loading__gap {
+  height: 3rem;
 }
 
-@keyframes works-pulse {
+.archive-loading__line {
+  height: 1px;
+  background: var(--arch-border);
+  animation: arch-load 1.4s ease-in-out infinite;
+}
+
+.archive-loading__line--long {
+  width: 100%;
+}
+
+.archive-loading__line--short {
+  width: 42%;
+}
+
+.archive-loading__line--featured {
+  height: 4rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--arch-border);
+  animation: arch-load 1.4s ease-in-out infinite;
+}
+
+@keyframes arch-load {
   0%,
   100% {
-    opacity: 1;
+    opacity: 0.35;
   }
 
   50% {
-    opacity: 0.35;
-  }
-}
-
-@media (max-width: 960px) {
-  .works__mosaic {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  .works__mosaic > :deep(.work-card) {
-    grid-column: span var(--work-col-span-md, 3);
-    grid-row: auto;
-  }
-
-  .works__skeleton--featured,
-  .works__skeleton--wide {
-    grid-column: span 6;
-    grid-row: span 1;
-  }
-
-  .works__skeleton--wide,
-  .works__skeleton:not(.works__skeleton--featured):not(.works__skeleton--wide) {
-    grid-column: span 3;
+    opacity: 0.85;
   }
 }
 
 @media (max-width: 620px) {
-  .works {
+  .archive__inner {
     padding: 3rem 1.25rem 4.5rem;
   }
 
-  .works__intro {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .works__intro-aside {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    text-align: left;
-  }
-
-  .works__mosaic {
-    grid-template-columns: 1fr;
-  }
-
-  .works__mosaic > :deep(.work-card),
-  .works__skeleton {
-    grid-column: span 1 !important;
-    grid-row: auto !important;
+  .archive-footer {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

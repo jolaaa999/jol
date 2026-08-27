@@ -1,0 +1,41 @@
+/**
+ * Editorial Archive — Design Tokens
+ * Swiss Grid × Digital Archive × Cyber Blue
+ */
+.archive {
+  --arch-bg: #080810;
+  --arch-fg: #f4f4f5;
+  --arch-fg-muted: #7c8090;
+  --arch-meta: #747887;
+  --arch-meta-active: #9ca7ff;
+  --arch-accent: #7187ff;
+  --arch-accent-violet: #9a7cff;
+  --arch-border: rgba(255, 255, 255, 0.1);
+  --arch-border-accent: rgba(120, 140, 255, 0.18);
+  --arch-max: 92rem;
+  --arch-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --arch-grid-cols: 12;
+}
+
+[data-theme='light'] .archive {
+  --arch-bg: rgba(8, 8, 16, 0.04);
+  --arch-fg: #0c1222;
+  --arch-fg-muted: #475569;
+  --arch-meta: #64748b;
+  --arch-meta-active: #4f46e5;
+  --arch-accent: #4f46e5;
+  --arch-border: rgba(12, 18, 34, 0.12);
+  --arch-border-accent: rgba(79, 70, 229, 0.2);
+}
+
+@media (max-width: 960px) {
+  .archive {
+    --arch-grid-cols: 8;
+  }
+}
+
+@media (max-width: 620px) {
+  .archive {
+    --arch-grid-cols: 4;
+  }
+}
