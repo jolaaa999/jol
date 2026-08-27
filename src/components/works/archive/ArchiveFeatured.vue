@@ -1,14 +1,27 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
+import gsap from 'gsap'
 import type { WorkProject } from '@/types/work'
 import ArchivePreview from '@/components/works/archive/ArchivePreview.vue'
 
-defineProps<{
+const props = defineProps<{
   work: WorkProject
   index: number
 }>()
 
 const hovered = ref(false)
+const copyRef = ref<HTMLElement | null>(null)
+const visualRef = ref<HTMLElement | null>(null)
+const labelRef = ref<HTMLElement | null>(null)
+
+const displayedWork = ref(props.work)
+const displayedIndex = ref(props.index)
+
+let animating = false
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
 
 function pad(n: number): string {
   return String(n + 1).padStart(2, '0')
@@ -23,50 +36,109 @@ function tagline(desc: string): string {
   if (clean.length <= 48) return clean.toUpperCase()
   return `${clean.slice(0, 48).trim()}…`
 }
+
+function syncDisplayed(): void {
+  displayedWork.value = props.work
+  displayedIndex.value = props.index
+}
+
+async function animateSwap(): Promise<void> {
+  const targets = [labelRef.value, copyRef.value, visualRef.value].filter(Boolean)
+  if (!targets.length) {
+    syncDisplayed()
+    return
+  }
+
+  if (prefersReducedMotion()) {
+    syncDisplayed()
+    return
+  }
+
+  animating = true
+
+  await gsap.to(targets, {
+    x: 56,
+    opacity: 0,
+    duration: 0.38,
+    ease: 'power2.in',
+    stagger: 0.04,
+  })
+
+  syncDisplayed()
+  hovered.value = false
+  await nextTick()
+
+  gsap.set(targets, { x: -56, opacity: 0 })
+
+  await gsap.to(targets, {
+    x: 0,
+    opacity: 1,
+    duration: 0.48,
+    ease: 'power3.out',
+    stagger: 0.05,
+    clearProps: 'transform',
+  })
+
+  animating = false
+}
+
+watch(
+  () => props.work.id,
+  (newId, oldId) => {
+    if (newId === oldId || animating) return
+    void animateSwap()
+  },
+)
+
+onMounted(() => {
+  syncDisplayed()
+})
 </script>
 
 <template>
   <article
+    id="archive-featured"
     class="archive-featured"
-    :id="`work-${work.id}`"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
   >
-    <div class="archive-featured__head">
+    <div ref="labelRef" class="archive-featured__head">
       <p class="archive-featured__label">
         <span>Featured</span>
         <span class="archive-featured__label-sep">/</span>
-        <span>{{ pad(index) }}</span>
+        <span>{{ pad(displayedIndex) }}</span>
       </p>
     </div>
 
     <div class="archive-featured__grid">
-      <div class="archive-featured__copy">
-        <h3 class="archive-featured__title">{{ work.name }}</h3>
-        <p class="archive-featured__tagline">{{ tagline(work.description) }}</p>
-        <p class="archive-featured__desc">{{ work.description }}</p>
+      <div ref="copyRef" class="archive-featured__copy">
+        <h3 class="archive-featured__title">{{ displayedWork.name }}</h3>
+        <p class="archive-featured__tagline">{{ tagline(displayedWork.description) }}</p>
+        <p class="archive-featured__desc">{{ displayedWork.description }}</p>
 
         <div class="archive-featured__meta">
-          <span>{{ work.language }}</span>
-          <span>{{ formatDate(work.updatedAt) }}</span>
-          <span v-if="work.stars > 0">★ {{ work.stars }}</span>
+          <span>{{ displayedWork.language }}</span>
+          <span>{{ formatDate(displayedWork.updatedAt) }}</span>
+          <span v-if="displayedWork.stars > 0">★ {{ displayedWork.stars }}</span>
         </div>
 
         <div class="archive-featured__actions" :class="{ 'is-visible': hovered }">
           <a
             class="archive-featured__link"
-            :href="work.repoUrl"
+            :href="displayedWork.repoUrl"
             target="_blank"
             rel="noopener noreferrer"
+            @click.stop
           >
             Repository ↗
           </a>
           <a
-            v-if="work.demoUrl"
+            v-if="displayedWork.demoUrl"
             class="archive-featured__link"
-            :href="work.demoUrl"
+            :href="displayedWork.demoUrl"
             target="_blank"
             rel="noopener noreferrer"
+            @click.stop
           >
             Live Demo →
           </a>
@@ -74,16 +146,17 @@ function tagline(desc: string): string {
 
         <a
           class="archive-featured__cta"
-          :href="work.demoUrl ?? work.repoUrl"
+          :href="displayedWork.demoUrl ?? displayedWork.repoUrl"
           target="_blank"
           rel="noopener noreferrer"
+          @click.stop
         >
           View Project ↗
         </a>
       </div>
 
-      <div class="archive-featured__visual">
-        <ArchivePreview :work="work" size="lg" />
+      <div ref="visualRef" class="archive-featured__visual">
+        <ArchivePreview :key="displayedWork.id" :work="displayedWork" size="lg" />
       </div>
     </div>
 
@@ -98,6 +171,7 @@ function tagline(desc: string): string {
 
 .archive-featured__head {
   margin-bottom: clamp(1.5rem, 4vh, 2.5rem);
+  overflow: hidden;
 }
 
 .archive-featured__label {
@@ -125,11 +199,13 @@ function tagline(desc: string): string {
 
 .archive-featured__copy {
   grid-column: 1 / 7;
+  overflow: hidden;
 }
 
 .archive-featured__visual {
   grid-column: 7 / -1;
   align-self: stretch;
+  overflow: hidden;
 }
 
 .archive-featured__title {

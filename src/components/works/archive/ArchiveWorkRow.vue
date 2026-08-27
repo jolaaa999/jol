@@ -6,6 +6,11 @@ import ArchivePreview from '@/components/works/archive/ArchivePreview.vue'
 defineProps<{
   work: WorkProject
   index: number
+  active?: boolean
+}>()
+
+const emit = defineEmits<{
+  select: [id: string]
 }>()
 
 const hovered = ref(false)
@@ -28,9 +33,15 @@ function tagline(desc: string): string {
 <template>
   <article
     class="archive-row"
+    :class="{ 'is-active': active }"
     :id="`work-${work.id}`"
+    role="button"
+    tabindex="0"
     @mouseenter="hovered = true"
     @mouseleave="hovered = false"
+    @click="emit('select', work.id)"
+    @keydown.enter.prevent="emit('select', work.id)"
+    @keydown.space.prevent="emit('select', work.id)"
   >
     <div class="archive-row__inner">
       <p class="archive-row__num">{{ pad(index) }}</p>
@@ -53,6 +64,7 @@ function tagline(desc: string): string {
           target="_blank"
           rel="noopener noreferrer"
           :aria-label="`查看 ${work.name}`"
+          @click.stop
         >
           ↗
         </a>
@@ -62,12 +74,14 @@ function tagline(desc: string): string {
             :href="work.repoUrl"
             target="_blank"
             rel="noopener noreferrer"
+            @click.stop
           >Repository ↗</a>
           <a
             v-if="work.demoUrl"
             :href="work.demoUrl"
             target="_blank"
             rel="noopener noreferrer"
+            @click.stop
           >Live Demo →</a>
         </div>
       </div>
@@ -84,6 +98,19 @@ function tagline(desc: string): string {
 <style scoped>
 .archive-row {
   position: relative;
+  cursor: pointer;
+}
+
+.archive-row.is-active .archive-row__title {
+  color: var(--arch-meta-active);
+}
+
+.archive-row.is-active .archive-row__num {
+  color: var(--arch-accent);
+}
+
+.archive-row.is-active .archive-row__rule {
+  background: var(--arch-border-accent);
 }
 
 .archive-row__inner {

@@ -10,7 +10,7 @@ import ArchiveWorkRow from '@/components/works/archive/ArchiveWorkRow.vue'
 import '@/styles/archive.css'
 
 const sectionRef = ref<HTMLElement | null>(null)
-const activeId = ref<string>()
+const featuredId = ref<string>()
 const { works, status } = useGithubWorks()
 
 const workCount = computed(() => works.value.length)
@@ -36,22 +36,22 @@ function pickFeaturedIndex(list: WorkProject[]): number {
   return best
 }
 
-const featuredIndex = computed(() => pickFeaturedIndex(works.value))
-
-const featuredWork = computed(() => {
-  const i = featuredIndex.value
-  return i >= 0 ? works.value[i] : undefined
-})
-
-const selectedWorks = computed(() =>
-  works.value.filter((_, i) => i !== featuredIndex.value),
+const featuredIndex = computed(() =>
+  works.value.findIndex((w) => w.id === featuredId.value),
 )
 
-function scrollToWork(id: string): void {
-  activeId.value = id
-  document.getElementById(`work-${id}`)?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'nearest',
+const featuredWork = computed(() =>
+  featuredIndex.value >= 0 ? works.value[featuredIndex.value] : undefined,
+)
+
+function selectFeatured(id: string): void {
+  if (!id || id === featuredId.value) return
+  featuredId.value = id
+  nextTick(() => {
+    document.getElementById('archive-featured')?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    })
   })
 }
 
@@ -84,6 +84,11 @@ watch(
   works,
   async (list) => {
     if (!list.length) return
+    const valid = list.some((w) => w.id === featuredId.value)
+    if (!valid) {
+      const idx = pickFeaturedIndex(list)
+      featuredId.value = list[idx]?.id
+    }
     await nextTick()
     playSectionEntrance()
   },
@@ -129,8 +134,8 @@ onMounted(() => {
         <ArchiveIndex
           data-archive-block
           :works="works"
-          :active-id="activeId"
-          @select="scrollToWork"
+          :active-id="featuredId"
+          @select="selectFeatured"
         />
 
         <ArchiveFeatured
@@ -141,7 +146,6 @@ onMounted(() => {
         />
 
         <section
-          v-if="selectedWorks.length"
           class="archive-selected"
           data-archive-block
           aria-label="精选作品"
@@ -153,10 +157,12 @@ onMounted(() => {
 
           <div class="archive-selected__list">
             <ArchiveWorkRow
-              v-for="work in selectedWorks"
+              v-for="(work, index) in works"
               :key="work.id"
               :work="work"
-              :index="works.findIndex((w) => w.id === work.id)"
+              :index="index"
+              :active="work.id === featuredId"
+              @select="selectFeatured"
             />
           </div>
         </section>
