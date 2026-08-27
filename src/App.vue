@@ -62,6 +62,7 @@ function onNavigate(to: string): void {
 }
 
 .app-stage--fluid {
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--fluid-fg);
+  transition: color 0.45s var(--ease-mechanical);
 }
 </style>

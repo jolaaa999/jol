@@ -1,4 +1,5 @@
-import { onMounted, onUnmounted, ref, type Ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 
 /** 流体渐变配色方案 */
 export interface FluidPalette {
@@ -7,8 +8,8 @@ export interface FluidPalette {
   base: [string, string, string]
 }
 
-/** 预设背景主题 */
-export const FLUID_PALETTES: FluidPalette[] = [
+/** 深色背景预设 */
+export const FLUID_PALETTES_DARK: FluidPalette[] = [
   {
     id: 'aurora',
     base: ['#0a0520', '#1a0a4a', '#0d2847'],
@@ -39,8 +40,44 @@ export const FLUID_PALETTES: FluidPalette[] = [
   },
 ]
 
+/** 浅色背景预设 — 天蓝 / 淡青 */
+export const FLUID_PALETTES_LIGHT: FluidPalette[] = [
+  {
+    id: 'sky-dawn',
+    base: ['#eef8ff', '#dceefb', '#e8f7fc'],
+    blobs: [
+      { x: 0.2, y: 0.35, r: 0.46, color: 'rgba(125, 211, 252, 0.62)' },
+      { x: 0.72, y: 0.28, r: 0.4, color: 'rgba(103, 232, 249, 0.55)' },
+      { x: 0.48, y: 0.74, r: 0.38, color: 'rgba(165, 243, 252, 0.5)' },
+      { x: 0.84, y: 0.58, r: 0.3, color: 'rgba(186, 230, 253, 0.45)' },
+    ],
+  },
+  {
+    id: 'mist-cyan',
+    base: ['#f0f9ff', '#e0f2fe', '#ecfeff'],
+    blobs: [
+      { x: 0.32, y: 0.42, r: 0.42, color: 'rgba(56, 189, 248, 0.48)' },
+      { x: 0.68, y: 0.38, r: 0.36, color: 'rgba(34, 211, 238, 0.42)' },
+      { x: 0.55, y: 0.78, r: 0.34, color: 'rgba(147, 197, 253, 0.38)' },
+    ],
+  },
+  {
+    id: 'cloud-aqua',
+    base: ['#f8fcff', '#dff6f8', '#e6f4ff'],
+    blobs: [
+      { x: 0.26, y: 0.3, r: 0.44, color: 'rgba(14, 165, 233, 0.35)' },
+      { x: 0.64, y: 0.52, r: 0.4, color: 'rgba(45, 212, 191, 0.32)' },
+      { x: 0.5, y: 0.8, r: 0.32, color: 'rgba(96, 165, 250, 0.28)' },
+    ],
+  },
+]
+
+/** @deprecated 使用 FLUID_PALETTES_DARK */
+export const FLUID_PALETTES = FLUID_PALETTES_DARK
+
 /** Canvas 流体渐变背景 — 多 blob 叠加 + 缓慢漂移 */
 export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
+  const { resolved } = useTheme()
   const paletteIndex = ref(0)
 
   let rafId = 0
@@ -50,8 +87,13 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
   let paused = false
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+  function getPalettes(): FluidPalette[] {
+    return resolved.value === 'light' ? FLUID_PALETTES_LIGHT : FLUID_PALETTES_DARK
+  }
+
   function getPalette(): FluidPalette {
-    return FLUID_PALETTES[paletteIndex.value % FLUID_PALETTES.length]!
+    const palettes = getPalettes()
+    return palettes[paletteIndex.value % palettes.length]!
   }
 
   function resize(): void {
@@ -73,6 +115,7 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
+    const isLight = resolved.value === 'light'
     const t = reducedMotion ? 0 : (now - startTime) * 0.00018
     const palette = getPalette()
     const [c0, c1, c2] = palette.base
@@ -84,7 +127,7 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
     ctx.fillStyle = grad
     ctx.fillRect(0, 0, width, height)
 
-    ctx.globalCompositeOperation = 'screen'
+    ctx.globalCompositeOperation = isLight ? 'multiply' : 'screen'
     for (let i = 0; i < palette.blobs.length; i++) {
       const blob = palette.blobs[i]!
       const phase = t + i * 1.7
@@ -127,11 +170,16 @@ export function useFluidGradient(canvasRef: Ref<HTMLCanvasElement | null>) {
   }
 
   function cyclePalette(): void {
-    paletteIndex.value = (paletteIndex.value + 1) % FLUID_PALETTES.length
+    paletteIndex.value = (paletteIndex.value + 1) % getPalettes().length
     if (reducedMotion || paused) {
       drawFrame(performance.now())
     }
   }
+
+  watch(resolved, () => {
+    paletteIndex.value = 0
+    drawFrame(performance.now())
+  })
 
   onMounted(() => {
     resize()

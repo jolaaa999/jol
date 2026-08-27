@@ -26,7 +26,12 @@
       ;(function () {
         try {
           var t = localStorage.getItem('jol-theme')
-          if (t === 'light') document.documentElement.setAttribute('data-theme', 'light')
+          var theme = t === 'light' ? 'light' : 'dark'
+          if (t === 'system') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          document.documentElement.setAttribute('data-theme', theme)
+          document.documentElement.style.colorScheme = theme
         } catch (e) {}
       })()
     </script>
