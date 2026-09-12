@@ -1,7 +1,10 @@
 package lib
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -28,11 +31,13 @@ type ListResponse struct {
 	Data     []Article `json:"data"`
 	Total    int       `json:"total"`
 	Category Category  `json:"category"`
+	Source   string    `json:"source,omitempty"`
 }
 
 // DetailResponse 单篇文章响应
 type DetailResponse struct {
-	Data Article `json:"data"`
+	Data   Article `json:"data"`
+	Source string  `json:"source,omitempty"`
 }
 
 // ErrorResponse 错误响应
@@ -97,7 +102,7 @@ var mockArticles = []Article{
 	},
 }
 
-// ArticleByID 按 ID 查找文章
+// ArticleByID 按 ID 查找 mock 文章
 func ArticleByID(id string) (Article, bool) {
 	for _, a := range mockArticles {
 		if a.ID == id {
@@ -107,7 +112,7 @@ func ArticleByID(id string) (Article, bool) {
 	return Article{}, false
 }
 
-// ArticlesByCategory 按分类筛选文章（返回副本，避免外部修改）
+// ArticlesByCategory 按分类筛选 mock 文章
 func ArticlesByCategory(category Category) []Article {
 	result := make([]Article, 0)
 	for _, a := range mockArticles {
@@ -116,6 +121,49 @@ func ArticlesByCategory(category Category) []Article {
 		}
 	}
 	return result
+}
+
+func resolveArticles(category Category) (articles []Article, source string, err error) {
+	if !HasMySQL() {
+		return ArticlesByCategory(category), "mock", nil
+	}
+
+	db, err := OpenDB()
+	if err != nil {
+		return ArticlesByCategory(category), "mock", nil
+	}
+
+	articles, err = ListArticlesDB(db, category)
+	if err != nil {
+		return ArticlesByCategory(category), "mock", nil
+	}
+	return articles, "mysql", nil
+}
+
+func resolveArticle(id string) (Article, string, error) {
+	if HasMySQL() {
+		db, err := OpenDB()
+		if err == nil {
+			a, err := GetArticleDB(db, id)
+			if err == nil {
+				return a, "mysql", nil
+			}
+			if !errors.Is(err, ErrArticleNotFound) {
+				// DB 异常时回退 mock
+			} else {
+				// MySQL 明确没有时再试 mock，方便过渡
+				if a, ok := ArticleByID(id); ok {
+					return a, "mock", nil
+				}
+				return Article{}, "", ErrArticleNotFound
+			}
+		}
+	}
+
+	if a, ok := ArticleByID(id); ok {
+		return a, "mock", nil
+	}
+	return Article{}, "", ErrArticleNotFound
 }
 
 // ServeArticleList 处理文章列表 GET 请求
@@ -133,11 +181,12 @@ func ServeArticleList(w http.ResponseWriter, r *http.Request, category Category)
 		return
 	}
 
-	articles := ArticlesByCategory(category)
+	articles, source, _ := resolveArticles(category)
 	WriteJSON(w, http.StatusOK, ListResponse{
 		Data:     articles,
 		Total:    len(articles),
 		Category: category,
+		Source:   source,
 	})
 }
 
@@ -156,8 +205,8 @@ func ServeArticleDetail(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	article, ok := ArticleByID(id)
-	if !ok {
+	article, source, err := resolveArticle(id)
+	if err != nil {
 		WriteJSON(w, http.StatusNotFound, ErrorResponse{
 			Error:   "not_found",
 			Message: "article not found",
@@ -165,5 +214,134 @@ func ServeArticleDetail(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, DetailResponse{Data: article})
+	WriteJSON(w, http.StatusOK, DetailResponse{Data: article, Source: source})
+}
+
+// ServeArticleWrite 处理 POST/PUT/DELETE（需 ADMIN_TOKEN）
+func ServeArticleWrite(w http.ResponseWriter, r *http.Request, id string) {
+	SetCORS(w)
+	if HandleOptions(w, r) {
+		return
+	}
+
+	if AdminToken() == "" {
+		WriteJSON(w, http.StatusServiceUnavailable, ErrorResponse{
+			Error:   "admin_disabled",
+			Message: "set ADMIN_TOKEN to enable write APIs",
+		})
+		return
+	}
+
+	if !RequireAdmin(r) {
+		WriteJSON(w, http.StatusUnauthorized, ErrorResponse{
+			Error:   "unauthorized",
+			Message: "invalid or missing admin token",
+		})
+		return
+	}
+
+	if !HasMySQL() {
+		WriteJSON(w, http.StatusServiceUnavailable, ErrorResponse{
+			Error:   "mysql_required",
+			Message: "set MYSQL_DSN and import sql/schema.sql before writing articles",
+		})
+		return
+	}
+
+	db, err := OpenDB()
+	if err != nil {
+		WriteJSON(w, http.StatusServiceUnavailable, ErrorResponse{
+			Error:   "db_unavailable",
+			Message: err.Error(),
+		})
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		var in ArticleInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_json",
+				Message: "request body must be JSON",
+			})
+			return
+		}
+		if in.Category == "" {
+			in.Category = CategoryReflection
+		}
+		article, err := CreateArticleDB(db, in)
+		if err != nil {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "create_failed",
+				Message: err.Error(),
+			})
+			return
+		}
+		WriteJSON(w, http.StatusCreated, DetailResponse{Data: article, Source: "mysql"})
+
+	case http.MethodPut:
+		if strings.TrimSpace(id) == "" {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "missing_id",
+				Message: "PUT requires article id",
+			})
+			return
+		}
+		var in ArticleInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "invalid_json",
+				Message: "request body must be JSON",
+			})
+			return
+		}
+		article, err := UpdateArticleDB(db, id, in)
+		if errors.Is(err, ErrArticleNotFound) {
+			WriteJSON(w, http.StatusNotFound, ErrorResponse{
+				Error:   "not_found",
+				Message: "article not found",
+			})
+			return
+		}
+		if err != nil {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "update_failed",
+				Message: err.Error(),
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, DetailResponse{Data: article, Source: "mysql"})
+
+	case http.MethodDelete:
+		if strings.TrimSpace(id) == "" {
+			WriteJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error:   "missing_id",
+				Message: "DELETE requires article id",
+			})
+			return
+		}
+		err := DeleteArticleDB(db, id)
+		if errors.Is(err, ErrArticleNotFound) {
+			WriteJSON(w, http.StatusNotFound, ErrorResponse{
+				Error:   "not_found",
+				Message: "article not found",
+			})
+			return
+		}
+		if err != nil {
+			WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
+				Error:   "delete_failed",
+				Message: err.Error(),
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
+
+	default:
+		WriteJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
+			Error:   "method_not_allowed",
+			Message: "use GET / POST / PUT / DELETE",
+		})
+	}
 }

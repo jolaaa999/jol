@@ -15,14 +15,17 @@ const { initTheme } = useTheme()
 initTheme()
 useSeo()
 
-const fluidRoutes = new Set(['entry', 'blog', 'blog-post', 'blog-tag'])
+const fluidRoutes = new Set(['entry', 'blog', 'blog-post', 'blog-tag', 'blog-admin'])
 
 const showFluidBackdrop = computed(() =>
   route.name != null && fluidRoutes.has(route.name as string),
 )
 
 const showMechanicalNav = computed(() =>
-  route.name === 'blog' || route.name === 'blog-post' || route.name === 'blog-tag',
+  route.name === 'blog' ||
+  route.name === 'blog-post' ||
+  route.name === 'blog-tag' ||
+  route.name === 'blog-admin',
 )
 
 function onNavigate(to: string): void {

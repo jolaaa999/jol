@@ -34,6 +34,11 @@ const router = createRouter({
           name: 'blog-tag',
           component: () => import('@/views/TagArchiveView.vue'),
         },
+        {
+          path: 'admin',
+          name: 'blog-admin',
+          component: () => import('@/views/AdminPostView.vue'),
+        },
       ],
     },
     /* 蒲公英落地页与诗词解锁 — 暂时隐藏，保留文件供后续启用 */
