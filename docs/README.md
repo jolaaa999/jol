@@ -22,7 +22,9 @@ jol/
 │   ├── api/           # Vercel Serverless 入口
 │   ├── sql/           # MySQL schema
 │   └── go.mod
-├── docs/              # 文档（本文件）
+├── docs/              # 文档
+│   ├── README.md
+│   └── jol_博客数据表.xlsx   # 数据表设计（对齐 AgentScope 格式）
 ├── api -> backend/api # 符号链接，供 Vercel 识别 /api
 ├── package.json       # 根脚本转发到 frontend
 └── vercel.json
