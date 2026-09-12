@@ -2,35 +2,12 @@
   "name": "jol",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "description": "Monorepo root - frontend / backend / docs",
   "scripts": {
-    "dev": "vite",
-    "build": "npm run generate:poem-font && vue-tsc -b && vite build",
-    "preview": "vite preview",
-    "generate:poem-font": "node scripts/generate-poem-glyphs.mjs",
-    "capture:work-previews": "python scripts/capture-work-previews.py"
-  },
-  "dependencies": {
-    "@fontsource/noto-sans-sc": "^5.2.9",
-    "@unhead/vue": "^3.4.0",
-    "gsap": "^3.13.0",
-    "highlight.js": "^11.12.0",
-    "marked": "^18.0.11",
-    "opentype.js": "^2.0.0",
-    "three": "^0.184.0",
-    "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.9.3",
-    "@types/opentype.js": "^1.3.10",
-    "@types/three": "^0.184.1",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.17",
-    "typescript": "~5.7.2",
-    "vite": "^6.0.5",
-    "vue-tsc": "^2.2.0"
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "install:frontend": "npm install --prefix frontend",
+    "capture:work-previews": "npm run capture:work-previews --prefix frontend"
   }
 }

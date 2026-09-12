@@ -3,10 +3,12 @@
 你需要写出高内聚、低耦合的优雅代码，重视封装。
 
 # Tech Stack & Architecture
-- Frontend: Vue 3 (Composition API, `<script setup>`), TypeScript, Vite, TailwindCSS.
-- Animations: GSAP,原生 Canvas API。
-- Backend: Go 语言 (专为 Vercel Serverless Functions 设计，必须放在根目录的 `/api` 文件夹下)。
-- Deployment: Vercel (前后端同源零配置)。
+- Monorepo 根目录同级：`frontend/` · `backend/` · `docs/`
+- Frontend (`frontend/`): Vue 3 (Composition API, `<script setup>`), TypeScript, Vite, TailwindCSS.
+- Animations: GSAP, 原生 Canvas API。
+- Backend (`backend/`): Go 语言 Serverless Functions，位于 `backend/api/`；根目录 `api` 为指向该目录的符号链接（供 Vercel 识别）。
+- Docs (`docs/`): 项目文档与 README。
+- Deployment: Vercel（前后端同源）。
 
 # Code Quality & Physics Engine Directives
 1. 严格遵循单一职责原则，抽象自定义 Hooks（如 `usePhysicsEngine.ts`）。
