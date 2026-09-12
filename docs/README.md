@@ -24,7 +24,8 @@ jol/
 │   └── go.mod
 ├── docs/              # 文档
 │   ├── README.md
-│   └── jol_博客数据表.xlsx   # 数据表设计（对齐 AgentScope 格式）
+│   ├── jol_博客数据表.xlsx      # 数据表设计（对齐 AgentScope 格式）
+│   └── jol_Chen_ER.drawio      # 陈氏 E-R 图（实体·属性·联系）
 ├── api -> backend/api # 符号链接，供 Vercel 识别 /api
 ├── package.json       # 根脚本转发到 frontend
 └── vercel.json
