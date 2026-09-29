@@ -364,8 +364,6 @@ function breadcrumbFor(index: number): string[] {
   gap: 0.15rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* 细滚动条，避免破坏极简观感 */
-  scrollbar-width: thin;
 }
 
 .cascade__item {

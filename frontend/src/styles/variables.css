@@ -19,6 +19,14 @@
   --color-accent-cyan: #00d4aa;
   --color-accent-cyan-dim: rgba(0, 212, 170, 0.12);
 
+  /* ── 滚动条 ──
+   * 默认几乎不可见（透明细线），仅在悬停时浮出一点存在感，
+   * 避免打断极简工业观感，同时保留「可滚动」的暗示。 */
+  --scrollbar-size: 6px;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --scrollbar-thumb-hover: var(--color-accent);
+  --scrollbar-track: transparent;
+
   /* ── 排版 ── */
   --font-sans: 'Inter', 'Noto Sans SC', 'Source Han Sans SC', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
@@ -97,6 +105,13 @@
   --color-foreground-dim: #334155;
   --color-accent: #ea580c;
   --color-accent-cyan: #0891b2;
+
+  /* ── 滚动条（浅色主题）── */
+  --scrollbar-size: 6px;
+  --scrollbar-thumb: rgba(15, 23, 42, 0.18);
+  --scrollbar-thumb-hover: var(--color-accent);
+  --scrollbar-track: transparent;
+
   --glass-bg: rgba(255, 255, 255, 0.88);
   --glass-border: rgba(15, 23, 42, 0.12);
   --shadow-glass: 0 8px 32px rgba(14, 116, 144, 0.12);
