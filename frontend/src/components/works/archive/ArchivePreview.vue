@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { WorkProject } from '@/types/work'
+import { publicUrl } from '@/utils/publicUrl'
 
 const props = defineProps<{
   work: WorkProject
@@ -10,7 +11,7 @@ const props = defineProps<{
 const imageLoaded = ref(false)
 const imageFailed = ref(false)
 
-const previewSrc = computed(() => `/works/previews/${props.work.id}.webp`)
+const previewSrc = computed(() => publicUrl(`/works/previews/${props.work.id}.webp`))
 const showImage = computed(() => imageLoaded.value && !imageFailed.value)
 
 function resetImageState(): void {

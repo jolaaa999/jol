@@ -1,4 +1,6 @@
 /** 站点全局配置 — 单一数据源 */
+import { publicUrl } from '@/utils/publicUrl'
+
 export const SITE = {
   name: 'JOL',
   title: 'JOL — Developer & Creator',
@@ -13,9 +15,9 @@ export const SITE = {
     github: 'jolaaa999',
     githubUrl: 'https://github.com/jolaaa999',
     bio: 'Developer & creator. Building digital experiences that merge technical precision with fluid aesthetics.',
-    avatar: '/avatar.svg',
+    avatar: publicUrl('/avatar.svg'),
   },
-  resumeUrl: '/resume.pdf',
+  resumeUrl: publicUrl('/resume.pdf'),
   social: {
     github: 'https://github.com/jolaaa999',
     email: 'mailto:2843422418@qq.com',

@@ -1,5 +1,6 @@
 import * as opentype from 'opentype.js'
 import { Font, FontLoader } from 'three/examples/jsm/loaders/FontLoader.js'
+import { publicUrl } from '@/utils/publicUrl'
 
 /** Typeface JSON 字形数据 */
 interface TypefaceGlyph {
@@ -26,11 +27,11 @@ export interface TypefaceJson {
   original_font_information: Record<string, string>
 }
 
-/** 预生成 typeface JSON 候选路径 */
-const FONT_JSON_CANDIDATES = ['/fonts/poem.typeface.json']
+/** 预生成 typeface JSON 候选路径（基线感知，适配子路径部署） */
+const FONT_JSON_CANDIDATES = [publicUrl('/fonts/poem.typeface.json')]
 
 /** 本地 WOFF 回退（generate:poem-font 会复制到 public/fonts） */
-const WOFF_CANDIDATES = ['/fonts/noto-sans-sc-chinese-simplified-400-normal.woff']
+const WOFF_CANDIDATES = [publicUrl('/fonts/noto-sans-sc-chinese-simplified-400-normal.woff')]
 
 /** 缓存的已加载字体实例 */
 let cachedFont: Font | null = null
