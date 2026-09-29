@@ -11,43 +11,30 @@
        * 而 index.html 只在根路径可用（不像 Vercel 有 rewrites）。官方推荐做法是
        * 用一个 404.html 把原始路径交给首页，再由首页还原路由。
        *
-       * 注意：public/ 下的文件不会被 Vite 处理，因此这里不能使用 %BASE_URL%
-       * 占位符——改为按 404.html 自身的脚本 URL 推断部署前缀，Vercel（'/'）与
-       * Pages（'/jol/'）均自动适配。
+       * 关键点：不能用 document.currentScript 推断部署前缀 —— 内联脚本中它可能为
+       * null（脚本被注入或延迟执行时），一旦回退成 '/' 就会丢掉 '<repo>/' 前缀，
+       * 跳到站点根并再次 404（实测踩过此坑）。
+       *
+       * 改为直接根据 location.pathname 首段判断：项目页部署时，404.html 位于
+       * /<repo>/404.html，被访问的深链也必然以 /<repo>/ 开头，因此首段即仓库名；
+       * 用户页 / 自定义域名则首段就是应用路由本身。
        */
       ;(function () {
-        // 当前脚本的 URL 形如 <base>404.html，据此反解出部署前缀。
-        // 注意 script.src 是完整 URL，必须用 URL 解析出路径部分，
-        // 才能与 location.pathname 做同类比较。
-        var base = '/'
-        var self = document.currentScript && document.currentScript.src
-        if (self) {
-          try {
-            var selfPath = new URL(self).pathname
-            var marker = selfPath.lastIndexOf('/404.html')
-            // 统一保留尾斜杠（'/' 或 '/jol/'），与 index.html 还原脚本的
-            // base 形式保持一致，避免拼出 /jol/jol 之类的重复前缀
-            if (marker !== -1) base = selfPath.slice(0, marker + 1)
-          } catch (e) {
-            base = '/'
-          }
-        }
+        // 应用自身的顶层路由，出现这些说明当前是根部署（无仓库前缀）
+        var APP_ROUTES = ['blog', 'entry', 'landing']
 
-        // 去掉部署子路径前缀，得到应用内路由
-        var segments = window.location.pathname.split('/').filter(Boolean)
-        var prefixParts = base.split('/').filter(Boolean)
-        if (
-          prefixParts.length &&
-          prefixParts.every(function (p, i) {
-            return segments[i] === p
-          })
-        ) {
-          segments = segments.slice(prefixParts.length)
+        var segs = window.location.pathname.split('/').filter(Boolean)
+        var base = '/'
+
+        if (segs.length && APP_ROUTES.indexOf(segs[0]) === -1) {
+          // 首段不是应用路由 => 视为项目页的仓库前缀
+          base = '/' + segs[0] + '/'
+          segs = segs.slice(1)
         }
 
         // 约定：hash 形如 `#/blog/post/xxx`（带前导斜杠），
         // 与 index.html 的还原脚本严格对应，避免两侧约定漂移。
-        var target = base + (segments.length ? '#/' + segments.join('/') : '')
+        var target = base + (segs.length ? '#/' + segs.join('/') : '')
         window.location.replace(target + window.location.search)
       })()
     </script>
