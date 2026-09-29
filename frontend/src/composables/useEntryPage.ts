@@ -22,9 +22,19 @@ const LAYER_STAGGER = 0.15
 const LAYER_DURATION = 0.56
 /** 开合缓动 */
 const MENU_EASE = 'power3.inOut'
-/** 白面板滑入：xPercent 100 = 整体在右缘外；0 = 就位 */
-const PANEL_SLIDE_CLOSED = 100
+/** 白面板就位时的水平位移 */
 const PANEL_SLIDE_OPEN = 0
+
+/*
+ * 关闭态的位移不走常量，而由 closedPanelX() 在运行时计算：
+ *
+ * 早期用的是 `xPercent: 100`，但它是相对面板自身宽度的百分比，
+ * 而面板右缘到视口右缘之间还有两条色带的宽度（见 .entry__menu-panel 的 right），
+ * 于是 100% 位移后面板仍会露出一截白边 —— 表现为菜单关闭时
+ * 白色面板已经"提前冒出来"（实测：关闭态面板左缘 1328 < 视口宽 1440）。
+ *
+ * 正确位移 = 面板宽度 + 右侧色带总宽，即整个抽屉宽度，才能完全推出视口。
+ */
 
 /** 入口页 GSAP：Hero 入场 + 三色递推菜单 */
 export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
@@ -109,6 +119,30 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     }
   }
 
+  /**
+   * 计算面板关闭态所需的水平位移量（px）。
+   *
+   * 位移 = 面板宽度 + 面板右侧两条色带的实际宽度，即整个抽屉宽度，
+   * 使面板完全退到视口右缘之外。
+   *
+   * 注意不能用 getPropertyValue 去解析 --menu-layer-*-w：
+   * 那些变量的值是 clamp(...) 这样的函数式表达式，parseFloat 只会取到
+   * 第一个数字（1.75、2.75），导致算出的位移严重偏小、面板关不干净。
+   * 因此这里直接量取色带渲染后的实际宽度。
+   */
+  function closedPanelX(root: HTMLElement, panel: Element | null): number {
+    if (!panel) return 0
+    const panelWidth = (panel as HTMLElement).offsetWidth || 0
+    const band1 = root.querySelector<HTMLElement>('[data-menu-layer="1"]')
+    const band2 = root.querySelector<HTMLElement>('[data-menu-layer="2"]')
+    /*
+     * 色带初始 scaleX(0)，offsetWidth 不受 transform 影响，仍返回布局宽度，
+     * 正是这里需要的「未展开时的占位宽度」。
+     */
+    const bandWidth = (band1?.offsetWidth || 0) + (band2?.offsetWidth || 0)
+    return panelWidth + bandWidth
+  }
+
   function resetMenuTextHidden(root: HTMLElement): void {
     const { navTextEls, menuTextEls } = getMenuLayers(root)
     setMaskedTextHidden(navTextEls)
@@ -127,7 +161,8 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       force3D: true,
     })
     gsap.set(panel, {
-      xPercent: PANEL_SLIDE_CLOSED,
+      x: closedPanelX(rootRef.value, panel),
+      xPercent: 0,
       transformOrigin: MENU_ORIGIN,
       force3D: true,
     })
@@ -152,7 +187,8 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       force3D: true,
     })
     gsap.set(panel, {
-      xPercent: PANEL_SLIDE_CLOSED,
+      x: closedPanelX(rootRef.value, panel),
+      xPercent: 0,
       transformOrigin: MENU_ORIGIN,
       force3D: true,
     })
@@ -167,7 +203,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
 
     if (reduced) {
       gsap.set([layer1, layer2], { scaleX: 1, transformOrigin: MENU_ORIGIN })
-      gsap.set(panel, { xPercent: PANEL_SLIDE_OPEN, transformOrigin: MENU_ORIGIN })
+      gsap.set(panel, { x: PANEL_SLIDE_OPEN, xPercent: 0, transformOrigin: MENU_ORIGIN })
       gsap.set(backdrop, { opacity: 1 })
       gsap.set(allText, { yPercent: 0 })
       isAnimating.value = false
@@ -182,7 +218,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
          * 级联面板场景下，面板内还有若干绝对定位层，若此处残留 xPercent
          * 会让整块抽屉停在视口外（实测踩过：打开后 rect.right 超出视口）。
          */
-        gsap.set(panel, { xPercent: PANEL_SLIDE_OPEN, x: 0, force3D: true })
+        gsap.set(panel, { x: PANEL_SLIDE_OPEN, xPercent: 0, force3D: true })
         isAnimating.value = false
       },
     })
@@ -212,7 +248,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     menuTimeline.to(
       panel,
       {
-        xPercent: PANEL_SLIDE_OPEN,
+        x: PANEL_SLIDE_OPEN,
         duration: LAYER_DURATION + 0.1,
         ease: MENU_EASE,
         force3D: true,
@@ -287,7 +323,7 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
       .to(
         panel,
         {
-          xPercent: PANEL_SLIDE_CLOSED,
+          x: closedPanelX(rootRef.value, panel),
           duration: 0.48,
           ease: MENU_EASE,
           force3D: true,

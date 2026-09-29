@@ -204,6 +204,17 @@ export function useCascadingPanels({ rootRef, topIndex, prefersReducedMotion }: 
 
     const targets = computeLayout()
     const width = panelWidth()
+
+    /*
+     * 前置隐藏：新推入的层此刻可能已按最终布局渲染，
+     * 若等到下面的 gsap.set 才处理，浏览器有机会先绘制一帧
+     * 「新面板已在终点且完全不透明」的画面（实测会出现闪现）。
+     * 这里在任何布局写入之前先把新层隐藏，确保它不会以最终态露脸。
+     */
+    if (direction === 'forward') {
+      const entering = layerAt(topIndex.value)
+      if (entering) gsap.set(entering, { opacity: 0 })
+    }
     const tl = gsap.timeline({
       defaults: { duration: SLIDE_DURATION, ease: SLIDE_EASE, force3D: true },
       onComplete: () => {

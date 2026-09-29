@@ -73,14 +73,26 @@ function reset(): void {
   stack.value = [props.root]
 }
 
-/** 栈变化后播放推进/回退过渡 */
+/**
+ * 栈变化后播放推进/回退过渡。
+ *
+ * 用 flush: 'post' 而不是额外的 requestAnimationFrame：
+ * watch 默认在 DOM 更新前触发，此时新层的节点尚未挂载、取不到尺寸；
+ * 而若再推到下一帧，新层会先以「最终布局」被浏览器绘制一帧，
+ * 表现为白色面板在正确位置闪一下再被拉回右侧重播动画（实测：点击后 17ms
+ * 新层的 rect 已在终点且 opacity 为 1）。flush: 'post' 在 DOM 更新后、
+ * 绘制前同步执行，gsap.set 因而能赶在本帧绘制之前把起点写好。
+ */
 let lastDepth = 0
-watch(topIndex, (next) => {
-  const direction = next > lastDepth ? 'forward' : 'back'
-  lastDepth = next
-  // 等 DOM 更新出新的层节点后再计算布局
-  requestAnimationFrame(() => play(direction))
-})
+watch(
+  topIndex,
+  (next) => {
+    const direction = next > lastDepth ? 'forward' : 'back'
+    lastDepth = next
+    play(direction)
+  },
+  { flush: 'post' },
+)
 
 onMounted(() => {
   requestAnimationFrame(() => applyLayout())
