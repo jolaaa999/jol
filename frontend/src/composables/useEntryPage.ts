@@ -137,12 +137,13 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
 
   /** 打开：最右黑带最先 → 紫带 → 白面板揭开 → 文字错落入场 */
   function openMenu(): void {
-    if (!rootRef.value || menuOpen.value || isAnimating.value) return
+    if (!rootRef.value || menuOpen.value) return
 
     const reduced = prefersReducedMotion()
     const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } =
       getMenuLayers(rootRef.value)
 
+    /* 可打断：若上一轮动画仍在进行，直接接管而不是丢弃本次请求 */
     menuTimeline?.kill()
 
     gsap.set([layer1, layer2], {
@@ -176,6 +177,12 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     menuTimeline = gsap.timeline({
       onComplete: () => {
         gsap.set(allText, { yPercent: 0 })
+        /*
+         * 显式清除面板的水平位移残留。
+         * 级联面板场景下，面板内还有若干绝对定位层，若此处残留 xPercent
+         * 会让整块抽屉停在视口外（实测踩过：打开后 rect.right 超出视口）。
+         */
+        gsap.set(panel, { xPercent: PANEL_SLIDE_OPEN, x: 0, force3D: true })
         isAnimating.value = false
       },
     })
@@ -234,17 +241,24 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     }
   }
 
-  /** 关闭：文字收回 → 白 → 紫 → 黑 */
+  /**
+   * 关闭：文字收回 → 白 → 紫 → 黑。
+   *
+   * 注意：这里**不能**用 `isAnimating` 作为守卫直接 return。
+   * 若打开动画尚未结束就请求关闭，早退会导致动画时间线无人收尾，
+   * `isAnimating` 永久停在 true，菜单再也无法打开（实测踩过此坑）。
+   * 正确做法是打断当前时间线并立即执行关闭。
+   */
   function closeMenu(): void {
-    if (!rootRef.value || !menuOpen.value || isAnimating.value) return
+    if (!rootRef.value || !menuOpen.value) return
 
+    /* 打断进行中的开合动画，避免两条时间线叠加 */
+    menuTimeline?.kill()
     isAnimating.value = true
 
     const reduced = prefersReducedMotion()
     const { layer1, layer2, panel, backdrop, navTextEls, menuTextEls } =
       getMenuLayers(rootRef.value)
-
-    menuTimeline?.kill()
 
     if (reduced) {
       menuOpen.value = false
@@ -298,8 +312,21 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     else openMenu()
   }
 
+  /**
+   * Esc 处理的前置拦截器。
+   *
+   * 级联面板场景下，Esc 应先在面板内部逐级回退，只有已在根层时才关闭整个菜单。
+   * 返回 true 表示事件已被消费，不再执行关闭。
+   */
+  let escapeInterceptor: (() => boolean) | null = null
+  function setEscapeInterceptor(fn: (() => boolean) | null): void {
+    escapeInterceptor = fn
+  }
+
   function onKeydown(e: KeyboardEvent): void {
-    if (e.key === 'Escape' && menuOpen.value) closeMenu()
+    if (e.key !== 'Escape' || !menuOpen.value) return
+    if (escapeInterceptor?.()) return
+    closeMenu()
   }
 
   onMounted(() => {
@@ -325,5 +352,6 @@ export function useEntryPage(rootRef: Ref<HTMLElement | null>) {
     openMenu,
     closeMenu,
     playPageExit,
+    setEscapeInterceptor,
   }
 }

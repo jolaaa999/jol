@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { inject, onUnmounted, ref } from 'vue'
+import { computed, inject, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useEntryPage, type EntryMenuItem } from '@/composables/useEntryPage'
+import { useEntryPage } from '@/composables/useEntryPage'
 import { usePageTransition } from '@/composables/usePageTransition'
+import { useBlogEntries } from '@/composables/useBlogEntries'
+import { useGithubWorks } from '@/composables/useGithubWorks'
+import type { CascadeItem, CascadePanel } from '@/types/cascade'
 import WorksShowcase from '@/components/works/WorksShowcase.vue'
 import AboutSection from '@/components/about/AboutSection.vue'
 import SiteFooter from '@/components/layout/SiteFooter.vue'
 import ThemeToggle from '@/components/ui/ThemeToggle.vue'
+import CascadePanels from '@/components/ui/CascadePanels.vue'
 import { useCommandPalette } from '@/composables/useCommandPalette'
 import { FLUID_CYCLE_KEY } from '@/composables/fluidGradientContext'
 import { useSeo } from '@/composables/useSeo'
@@ -27,18 +31,118 @@ let navigateTimeoutId = 0
 const HEADLINE = "Hi, I'm JOL"
 const headlineChars = HEADLINE.split('')
 
-/** 侧边菜单项 */
-const menuItems: EntryMenuItem[] = [
-  { id: 'home', label: 'HOME', href: '/blog' },
-  { id: 'about', label: 'ABOUT', href: '#about' },
-  { id: 'works', label: 'WORKS', href: '#works' },
-  { id: 'reflections', label: 'REFLECTIONS', href: '/blog#reflections' },
-  { id: 'contact', label: 'CONTACT', href: '#contact' },
-]
+/** 文章与作品数据源（供二级面板使用） */
+const { entries } = useBlogEntries()
+const { works } = useGithubWorks()
 
-const { menuOpen, isExiting, toggleMenu, closeMenu, playPageExit } = useEntryPage(rootRef)
+/**
+ * 二级面板：作品列表。
+ * 每个作品再展开为三级面板，提供仓库与在线演示入口。
+ */
+const workItems = computed<CascadeItem[]>(() =>
+  works.value.map((work) => ({
+    id: `work-${work.id}`,
+    label: work.name,
+    meta: work.language,
+    kind: 'panel',
+    children: [
+      {
+        id: `work-${work.id}-repo`,
+        label: '查看仓库',
+        kind: 'external',
+        href: work.repoUrl,
+      },
+      ...(work.demoUrl
+        ? [
+            {
+              id: `work-${work.id}-demo`,
+              label: '在线演示',
+              kind: 'external' as const,
+              href: work.demoUrl,
+            },
+          ]
+        : []),
+      ...(work.description
+        ? [
+            {
+              id: `work-${work.id}-desc`,
+              label: work.description,
+              kind: 'link' as const,
+              href: '#works',
+            },
+          ]
+        : []),
+    ],
+  })),
+)
+
+/** 二级面板：文章列表，按时间倒序 */
+const reflectionItems = computed<CascadeItem[]>(() =>
+  entries.value.map((entry) => ({
+    id: `post-${entry.id}`,
+    label: entry.title,
+    meta: entry.date,
+    kind: 'link',
+    href: `/blog/post/${entry.id}`,
+  })),
+)
+
+/** 级联面板组件引用，用于在菜单开关时重置层级 */
+const cascadeRef = ref<InstanceType<typeof CascadePanels> | null>(null)
+
+/**
+ * 处理级联面板的跳转请求。
+ * `__close__` 为面板在根层按下 Esc 时的关闭信号。
+ */
+function onCascadeNavigate(href: string): void {
+  if (href === '__close__') {
+    closeMenu()
+    return
+  }
+  navigateWithTransition(href)
+}
+
+/** 侧边菜单：级联堆叠面板的根面板 */
+const menuTree = computed<CascadePanel>(() => ({
+  id: 'root',
+  title: 'Menu',
+  items: [
+    { id: 'home', label: 'HOME', kind: 'link', href: '/blog' },
+    { id: 'about', label: 'ABOUT', kind: 'link', href: '#about' },
+    {
+      id: 'works',
+      label: 'WORKS',
+      kind: 'panel',
+      children: workItems.value,
+    },
+    {
+      id: 'reflections',
+      label: 'REFLECTIONS',
+      kind: 'panel',
+      children: reflectionItems.value,
+    },
+    { id: 'contact', label: 'CONTACT', kind: 'link', href: '#contact' },
+  ],
+}))
+
+const { menuOpen, isExiting, toggleMenu, closeMenu, playPageExit, setEscapeInterceptor } =
+  useEntryPage(rootRef)
 const { markFromEntry, beginTransition, endTransition } = usePageTransition()
 const cyclePalette = inject(FLUID_CYCLE_KEY, () => {})
+
+/**
+ * Esc 先在级联面板内逐级回退，仅在根层时才关闭整个菜单。
+ * 若不加拦截，页面级监听会直接把菜单关掉，深层导航路径就断了。
+ */
+setEscapeInterceptor(() => cascadeRef.value?.handleEscape() ?? false)
+
+/** 打开菜单：每次从一级面板开始，避免残留上次的层级 */
+function handleToggleMenu(): void {
+  if (!menuOpen.value) {
+    cascadeRef.value?.reset()
+  }
+  toggleMenu()
+}
 
 function navigateWithTransition(href: string): void {
   if (isExiting.value) return
@@ -74,11 +178,6 @@ function navigateWithTransition(href: string): void {
       router.push({ path, hash }).finally(endTransition)
     })
   }, delay)
-}
-
-/** 导航至目标路径（hash 滚动由 router scrollBehavior 统一处理） */
-function navigateTo(href: string): void {
-  navigateWithTransition(href)
 }
 
 onUnmounted(() => {
@@ -119,7 +218,7 @@ function scrollToWorks(): void {
           class="entry__menu-trigger"
           :aria-expanded="menuOpen"
           aria-controls="entry-menu"
-          @click="toggleMenu"
+          @click="handleToggleMenu"
         >
           <span>Menu</span>
           <span class="entry__menu-icon" aria-hidden="true">+</span>
@@ -215,80 +314,71 @@ function scrollToWorks(): void {
       />
 
       <div class="entry__menu-drawer" data-menu-drawer>
-        <!-- 三层右缘对齐、零间隙堆叠，从浏览器侧面连续推出 -->
+        <!-- 右缘色带：黑 → 紫，展开后作为级联面板的景深衬底 -->
         <div class="entry__menu-stack">
           <div class="entry__menu-layer entry__menu-layer--1" data-menu-layer="1" />
           <div class="entry__menu-layer entry__menu-layer--2" data-menu-layer="2" />
+
+          <!-- 级联堆叠面板：逐级推出，父层保留窄条可回退 -->
           <aside class="entry__menu-panel" data-menu-panel>
-          <button type="button" class="entry__menu-close" aria-label="关闭菜单" @click="closeMenu">
-            <span class="entry__menu-close-mask" data-menu-text-mask>
-              <span class="entry__menu-close-inner" data-menu-text-inner>
-                <span class="entry__iridescent entry__iridescent--menu">Close</span>
-                <span class="entry__iridescent entry__iridescent--menu" aria-hidden="true">×</span>
+            <button type="button" class="entry__menu-close" aria-label="关闭菜单" @click="closeMenu">
+              <span class="entry__menu-close-mask" data-menu-text-mask>
+                <span class="entry__menu-close-inner" data-menu-text-inner>
+                  <span class="entry__iridescent entry__iridescent--menu">Close</span>
+                  <span class="entry__iridescent entry__iridescent--menu" aria-hidden="true">×</span>
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
 
-          <nav class="entry__menu-nav" aria-label="站点导航">
-            <a
-              v-for="item in menuItems"
-              :key="item.id"
-              class="entry__menu-link"
-              :href="item.href"
-              @click.prevent="navigateTo(item.href)"
+            <CascadePanels
+              ref="cascadeRef"
+              class="entry__menu-cascade"
+              :root="menuTree"
+              @navigate="onCascadeNavigate"
             >
-              <span class="entry__menu-link-mask" data-menu-text-mask>
-                <span
-                  class="entry__menu-link-inner entry__iridescent entry__iridescent--menu"
-                  data-menu-nav-text
-                >{{ item.label }}</span>
-              </span>
-            </a>
-          </nav>
+              <!-- 根层底部：Credits 与 Socials，保留原有入口 -->
+              <template #footer>
+                <a
+                  class="entry__menu-credits"
+                  href="https://github.com/jolaaa999/jol"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="entry__menu-credits-mask" data-menu-text-mask>
+                    <span class="entry__menu-credits-inner" data-menu-text-inner>
+                      <span class="entry__iridescent entry__iridescent--menu">Credits</span>
+                      <span class="entry__menu-arrow entry__iridescent entry__iridescent--menu" aria-hidden="true">↗</span>
+                    </span>
+                  </span>
+                </a>
 
-          <a
-            class="entry__menu-credits"
-            href="https://github.com/jolaaa999/jol"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <span class="entry__menu-credits-mask" data-menu-text-mask>
-              <span class="entry__menu-credits-inner" data-menu-text-inner>
-                <span class="entry__iridescent entry__iridescent--menu">Credits</span>
-                <span class="entry__menu-arrow entry__iridescent entry__iridescent--menu" aria-hidden="true">↗</span>
-              </span>
-            </span>
-          </a>
-
-          <footer class="entry__menu-footer">
-            <span class="entry__menu-footer-label-mask" data-menu-text-mask>
-              <span
-                class="entry__menu-footer-label entry__iridescent entry__iridescent--menu"
-                data-menu-text-inner
-              >Socials</span>
-            </span>
-            <div class="entry__menu-footer-links">
-              <button
-                type="button"
-                class="entry__menu-footer-link"
-                @click="cyclePalette"
-              >
-                <span class="entry__menu-footer-link-mask" data-menu-text-mask>
-                  <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>切换背景</span>
-                </span>
-              </button>
-              <a
-                class="entry__menu-footer-link"
-                href="https://github.com/jolaaa999/jol"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span class="entry__menu-footer-link-mask" data-menu-text-mask>
-                  <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>GitHub</span>
-                </span>
-              </a>
-            </div>
-          </footer>
+                <div class="entry__menu-footer">
+                  <span class="entry__menu-footer-label-mask" data-menu-text-mask>
+                    <span
+                      class="entry__menu-footer-label entry__iridescent entry__iridescent--menu"
+                      data-menu-text-inner
+                    >Socials</span>
+                  </span>
+                  <div class="entry__menu-footer-links">
+                    <button type="button" class="entry__menu-footer-link" @click="cyclePalette">
+                      <span class="entry__menu-footer-link-mask" data-menu-text-mask>
+                        <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>切换背景</span>
+                      </span>
+                    </button>
+                    <a
+                      class="entry__menu-footer-link"
+                      href="https://github.com/jolaaa999/jol"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <span class="entry__menu-footer-link-mask" data-menu-text-mask>
+                        <span class="entry__iridescent entry__iridescent--menu" data-menu-text-inner>GitHub</span>
+                      </span>
+                    </a>
+                  </div>
+                </div>
+              </template>
+            </CascadePanels>
           </aside>
         </div>
       </div>
@@ -694,23 +784,39 @@ function scrollToWorks(): void {
 }
 
 .entry__menu-panel {
+  /* 纯定位容器：白色面板外观由内部级联层承担 */
   right: calc(var(--menu-layer-1-w) + var(--menu-layer-2-w));
   width: var(--menu-panel-w);
   z-index: 1;
-  padding: clamp(1.35rem, 3vw, 2.15rem) clamp(1.35rem, 3.5vw, 2.35rem);
-  background: #fafafa;
+  padding: 0;
+  background: transparent;
   color: #0a0a0b;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
-  /* 初始收在右缘外，由 GSAP xPercent 滑入 */
-  transform: translateX(100%);
+  /*
+   * 不在 CSS 里写 transform 兜底：GSAP 通过 xPercent 独占控制位移，
+   * 若此处再留 translateX(100%) 会与其叠加，导致面板最终停在 100% 偏移处（实测踩过）。
+   * 关闭初值由 useEntryPage.initMenuClosed() 在挂载时设置。
+   */
   transform-origin: right center;
+  overflow: visible;
 }
 
+/* 级联面板填满抽屉内容区 */
+.entry__menu-cascade {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Close 按钮浮在级联面板之上 */
 .entry__menu-close {
+  position: absolute;
+  top: clamp(1.35rem, 3vw, 2.15rem);
+  right: clamp(1.35rem, 3.5vw, 2.35rem);
+  z-index: 200;
   align-self: flex-end;
-  margin: 0 0 clamp(2.5rem, 9vh, 5rem);
+  margin: 0;
   padding: 0;
   border: none;
   background: none;
@@ -718,7 +824,6 @@ function scrollToWorks(): void {
 }
 
 .entry__menu-close-mask,
-.entry__menu-link-mask,
 .entry__menu-credits-mask,
 .entry__menu-footer-label-mask,
 .entry__menu-footer-link-mask {
@@ -726,7 +831,6 @@ function scrollToWorks(): void {
 }
 
 .entry__menu-close-inner,
-.entry__menu-link-inner,
 .entry__menu-credits-inner,
 .entry__menu-footer-label,
 .entry__menu-footer-link-mask [data-menu-text-inner] {
@@ -756,42 +860,6 @@ function scrollToWorks(): void {
 
 .entry__menu-close-inner .entry__iridescent--menu {
   display: inline-block;
-}
-
-.entry__menu-nav {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.15rem, 0.8vh, 0.35rem);
-  flex: 1;
-}
-
-.entry__menu-link {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-}
-
-.entry__menu-link-mask {
-  display: block;
-  overflow: hidden;
-  height: 1.06em;
-  font-size: clamp(2.5rem, 5.8vw, 3.65rem);
-  font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.06;
-}
-
-.entry__menu-link-inner {
-  display: block;
-  transition: filter 0.28s var(--ease-mechanical);
-}
-
-.entry__menu-link-inner.entry__iridescent--menu {
-  display: block;
-}
-
-.entry__menu-link:hover .entry__menu-link-inner {
-  filter: brightness(1.12) saturate(1.15);
 }
 
 .entry__menu-credits {
