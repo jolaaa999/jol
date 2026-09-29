@@ -1,0 +1,70 @@
+name: Deploy to GitHub Pages
+
+# 仅发布前端静态站。
+# 后端（Go Serverless + MySQL）依赖 Vercel，GitHub Pages 不提供运行时，
+# 因此博客文章列表 / 后台发文 / RSS / Newsletter 在此部署中不可用，
+# 前端会自动回退到内置的本地文章数据（见 useBlogEntries 的 fallback 逻辑）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:
+
+# GITHUB_TOKEN 最小权限：读取仓库 + 发布 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个发布，避免并发覆盖
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # 项目页地址为 https://<user>.github.io/<repo>/，需以子路径作为基线，
+      # 否则资源与路由都会 404。
+      - name: Build
+        working-directory: frontend
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

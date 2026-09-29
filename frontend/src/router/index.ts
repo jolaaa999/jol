@@ -1,8 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-/** 应用路由实例 */
+/**
+ * 应用路由实例。
+ * history base 取 Vite 注入的 BASE_URL：
+ * Vercel 为 `/`，GitHub Pages 项目页为 `/jol/`，无需手动分支。
+ */
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

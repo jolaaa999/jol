@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
@@ -13,8 +13,9 @@
     <meta property="og:site_name" content="JOL" />
     <meta property="og:locale" content="zh_CN" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="alternate" type="application/rss+xml" title="JOL Blog RSS" href="/feed.xml" />
-    <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
+    <!-- RSS / Sitemap 在 Pages 上由后端提供，故指向 Pages 自身的静态副本 -->
+    <link rel="alternate" type="application/rss+xml" title="JOL Blog RSS" href="%BASE_URL%feed.xml" />
+    <link rel="sitemap" type="application/xml" href="%BASE_URL%sitemap.xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -38,6 +39,24 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      /*
+       * 还原 404.html 兜底带来的深链。
+       * 约定 hash 形如 `#/blog/post/xxx`（见 public/404.html），
+       * 仅在真正的 404 页跳回时存在，正常访问不受影响。
+       * 用 replaceState 抹掉 hash，保留原始 query。
+       */
+      ;(function () {
+        try {
+          var hash = window.location.hash
+          if (!hash || hash.charAt(1) !== '/') return
+          // %BASE_URL% 由 Vite 构建期替换：Vercel 为 '/'，Pages 为 '/jol/'
+          var base = '%BASE_URL%'.replace(/\/$/, '')
+          // hash.slice(1) 得到 '/blog/post/xxx'，与 base 拼接即为完整路径
+          window.history.replaceState(null, '', base + hash.slice(1) + window.location.search)
+        } catch (e) {}
+      })()
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

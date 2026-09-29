@@ -72,6 +72,10 @@ API：
 
 ## 部署
 
+项目支持**双目标部署**，共用同一份代码，由构建期环境变量 `VITE_BASE` 区分基线路径。
+
+### Vercel（完整功能：前端 + Go API）
+
 ```bash
 vercel
 ```
@@ -79,3 +83,43 @@ vercel
 在 Vercel 项目 Settings → Environment Variables 填入 `MYSQL_DSN` 与 `ADMIN_TOKEN`。云服务器上的 MySQL 需允许 Vercel 出口 IP 访问，或改用可公网访问的托管 MySQL。
 
 Root Directory 保持仓库根目录（不要设成 `frontend/`），以便同时识别 `api` 符号链接与 `frontend/dist`。
+
+Vercel 为根路径部署，无需设置 `VITE_BASE`（默认 `/`）。
+
+### GitHub Pages（纯前端静态站）
+
+访问地址：<https://jolaaa999.github.io/jol/>
+
+工作流 `.github/workflows/deploy-pages.yml` 在 `main` 分支推送 `frontend/**` 时自动构建发布，构建期注入 `VITE_BASE=/<repo>/`。
+
+**首次启用需手动操作一次**：仓库 Settings → Pages → Source 选择 **GitHub Actions**。
+
+#### Pages 功能边界（重要）
+
+GitHub Pages 只托管静态文件，**不提供任何服务端运行时**，因此以下依赖 Go API 的功能在该部署中不可用：
+
+| 功能 | Pages 表现 | 原因 |
+|------|-----------|------|
+| 博客文章正文 | 回退到内置本地数据 | 文章存于 MySQL，经 Go Serverless 读取 |
+| `/blog/admin` 后台发文 | 不可用 | 无后端，写接口返回 503 |
+| `/api/rss` | 不可用 | 无后端 |
+| Newsletter 订阅 | 不可用 | 无后端 |
+| 作品集 Works | 正常 | 浏览器直连 `api.github.com` 公开接口 |
+| 诗词解锁 / 动效 / 主题 | 正常 | 纯前端 |
+
+前端已内置降级处理（`useBlogEntries` 捕获异常后回退 `FALLBACK_ENTRIES`），因此 Pages 上页面不会报错，只是文章列表为本地兜底内容。**如需完整博客功能，请使用 Vercel 部署。**
+
+### 子路径适配
+
+`vite.config.ts` 读取 `process.env.VITE_BASE`（默认 `'/'`）作为 `base`，该值同时被 Vite 注入为 `import.meta.env.BASE_URL`，供路由与资源引用复用：
+
+- `src/router/index.ts` 使用 `createWebHistory(import.meta.env.BASE_URL)`
+- `index.html` 中静态资源通过 `%BASE_URL%` 占位符引用
+- `public/404.html` 提供 SPA 深链兜底（Pages 对未知路径返回真实 404，不像 Vercel 有 `rewrites`），按自身脚本 URL 推断前缀，仅在 Pages 生效
+
+本地验证子路径构建：
+
+```bash
+cd frontend
+VITE_BASE=/jol/ npm run build   # Windows PowerShell: $env:VITE_BASE='/jol/'; npm run build
+```
