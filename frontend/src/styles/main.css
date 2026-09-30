@@ -43,22 +43,22 @@
   }
 
   /*
-   * 全局滚动条：透明、细化。
+   * 全局滚动条：统一 6px、透明、细化。
    *
-   * 两套写法缺一不可：
-   * - scrollbar-width / scrollbar-color 是标准属性，Firefox 与 Chrome 121+ 支持；
-   *   一旦声明，WebKit 的伪元素写法在 Chrome 中会被忽略（标准属性优先级更高）。
-   * - ::-webkit-scrollbar 覆盖 Safari 与旧版 Chrome/Edge，并可控制轨道与圆角。
+   * 这里刻意「不」声明标准属性 scrollbar-width / scrollbar-color。
+   * 原因是 Chromium 对标准属性有下限：scrollbar-width: thin 实测占 10px、
+   * auto 占 15px，且标准属性一经声明便会压过 ::-webkit-scrollbar，
+   * 于是 --scrollbar-size 写的 6px 在 Chrome/Edge 里根本不会生效。
+   * 想要严格 6px，就只能只走 WebKit 伪元素这条路径。
+   *
+   * 代价：Firefox 不支持 ::-webkit-scrollbar，会退回系统默认滚动条。
+   * 该取舍是有意为之 —— 视觉一致性优先，且 Firefox 仍可正常滚动。
+   * （Firefox 若也要细化，只能额外写 @supports not selector(::-webkit-scrollbar)
+   * 分支去设 scrollbar-width: thin，但那又会把宽度绑回 10px，故不采用。）
    *
    * 为避免「滚动条消失后无法感知可滚动区域」，滑块保留极低的不透明度作为暗示，
    * 悬停时点亮为强调色。
    */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  }
-
-  /* 滑块两端的圆角需要留出内间距，否则细滑块会被裁成方角 */
   ::-webkit-scrollbar {
     width: var(--scrollbar-size);
     height: var(--scrollbar-size);
