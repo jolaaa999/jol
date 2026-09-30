@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { WorkProject } from '@/types/work'
 import { publicUrl } from '@/utils/publicUrl'
+import { hasWorkPreview } from '@/utils/workPreview'
 
 const props = defineProps<{
   work: WorkProject
@@ -11,14 +12,32 @@ const props = defineProps<{
 const imageLoaded = ref(false)
 const imageFailed = ref(false)
 
-const previewSrc = computed(() => publicUrl(`/works/previews/${props.work.id}.webp`))
-const showImage = computed(() => imageLoaded.value && !imageFailed.value)
+/**
+ * 该作品是否已有预览图。
+ *
+ * 依据是构建期生成的静态清单（见 utils/workPreview.ts），同步可得，
+ * 因此没有「先占位、后淡入」的探测间隙。
+ */
+const previewExists = computed(() => hasWorkPreview(props.work.id))
+
+/**
+ * 仅在清单确认存在时才设置 src。
+ *
+ * 缺失截图的 id 完全不发请求，直接展示占位块；
+ * 把图片补进 public/works/previews/ 后重新构建即自动显示，无需改代码。
+ */
+const previewSrc = computed(() =>
+  previewExists.value ? publicUrl(`/works/previews/${props.work.id}.webp`) : undefined,
+)
+
+const showImage = computed(() => previewExists.value && imageLoaded.value && !imageFailed.value)
 
 function resetImageState(): void {
   imageLoaded.value = false
   imageFailed.value = false
 }
 
+// 列表复用组件时 id 会变化，需重置加载态，否则会沿用上一个作品的 has-image
 watch(() => props.work.id, resetImageState)
 
 const LANG_HUE: Record<string, number> = {
@@ -44,6 +63,7 @@ function langHue(lang: string): number {
     aria-hidden="true"
   >
     <img
+      v-if="previewSrc"
       class="archive-preview__shot"
       :src="previewSrc"
       :alt="`${work.name} preview`"
