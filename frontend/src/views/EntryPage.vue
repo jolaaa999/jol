@@ -834,8 +834,15 @@ function scrollToWorks(): void {
 .entry__menu-credits-inner,
 .entry__menu-footer-label,
 .entry__menu-footer-link-mask [data-menu-text-inner] {
-  /* GSAP 入场前 fallback：内层藏在遮罩顶缘外 */
-  transform: translateY(-110%);
+  /*
+   * 隐藏初值只能由 setMaskedTextHidden() 的 gsap.set(yPercent: -110) 提供。
+   *
+   * 这里曾经写 `transform: translateY(-110%)` 作为 GSAP 就绪前的 fallback，
+   * 但 GSAP 补间 yPercent 时只接管 yPercent 通道，不会清掉 CSS 里的 translateY，
+   * 而是把它当作静态基线保留在 translate3d 分量里。最终位移变成
+   * 「CSS 基线(-110%) + yPercent(已归 0)」，元素永远停在遮罩外——
+   * 表现为 Credits / Socials / GitHub 一片空白但依然可点击（实测踩过）。
+   */
   will-change: transform;
 }
 

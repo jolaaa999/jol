@@ -29,6 +29,12 @@ export function setMaskedTextHidden(
   targets: gsap.TweenTarget,
   hiddenYPercent: number = STAGGERED_MASKED_TEXT_DEFAULTS.hiddenYPercent,
 ): void {
+  // 空集合必须早退：调用方（如 useEntryPage.resetMenuTextHidden）直接传
+  // querySelectorAll 的结果，空 NodeList 本身合法，但缺 length 守卫会让
+  // GSAP 打印 "GSAP target [object NodeList] not found" 警告（实测踩过）。
+  if (!targets) return
+  if (Array.isArray(targets) && targets.length === 0) return
+  if (targets instanceof NodeList && targets.length === 0) return
   gsap.set(targets, { yPercent: hiddenYPercent, force3D: true })
 }
 
