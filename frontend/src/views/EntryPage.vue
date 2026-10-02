@@ -198,31 +198,35 @@ function scrollToWorks(): void {
 <template>
   <div ref="rootRef" class="entry" :class="{ 'entry--menu-open': menuOpen, 'entry--exiting': isExiting }">
     <header class="entry__header">
-      <div class="entry__brand" data-hero-block>
-        <span class="entry__brand-text">jol</span>
-        <span class="entry__brand-dot" />
+      <div class="entry__header-mask">
+        <div class="entry__brand" data-hero-block>
+          <span class="entry__brand-text">jol</span>
+          <span class="entry__brand-dot" />
+        </div>
       </div>
 
-      <div class="entry__header-actions" data-hero-block>
-        <button
-          type="button"
-          class="entry__search-trigger"
-          aria-label="搜索"
-          @click="showCommandPalette"
-        >
-          ⌘K
-        </button>
-        <ThemeToggle />
-        <button
-          type="button"
-          class="entry__menu-trigger"
-          :aria-expanded="menuOpen"
-          aria-controls="entry-menu"
-          @click="handleToggleMenu"
-        >
-          <span>Menu</span>
-          <span class="entry__menu-icon" aria-hidden="true">+</span>
-        </button>
+      <div class="entry__header-mask">
+        <div class="entry__header-actions" data-hero-block>
+          <button
+            type="button"
+            class="entry__search-trigger"
+            aria-label="搜索"
+            @click="showCommandPalette"
+          >
+            ⌘K
+          </button>
+          <ThemeToggle />
+          <button
+            type="button"
+            class="entry__menu-trigger"
+            :aria-expanded="menuOpen"
+            aria-controls="entry-menu"
+            @click="handleToggleMenu"
+          >
+            <span>Menu</span>
+            <span class="entry__menu-icon" aria-hidden="true">+</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -419,6 +423,25 @@ function scrollToWorks(): void {
   align-items: center;
   justify-content: space-between;
   padding: clamp(1.25rem, 3vw, 2rem) clamp(1.5rem, 4vw, 2.75rem);
+}
+
+/*
+ * 页头两块的遮罩容器。
+ *
+ * [data-hero-block] 的入场位移是 yPercent: -110，若没有 overflow: hidden
+ * 的父级，元素会真的移到视口上缘之外再滑回来——观感是「从屏幕外滑入」，
+ * 而不是「从看不见到看得见」（实测动画中 .entry__header-actions 的
+ * y 为 -1，父级 overflow 为 visible）。包一层裁剪容器后与 Hero 区
+ * 的 .entry__hero-block-mask 使用同一套揭开式机制。
+ *
+ * 上下各留 0.35rem：.entry__brand-dot 带 12px 光晕，裁得过紧会削掉辉光。
+ * 用 padding 而非放宽高度，避免 mask 高度变化影响 flex 基线对齐。
+ */
+.entry__header-mask {
+  overflow: hidden;
+  padding: 0.35rem 0;
+  /* 抵消内边距，保持与原有 padding 相同的视觉位置 */
+  margin: -0.35rem 0;
 }
 
 .entry__header-actions {
@@ -740,6 +763,15 @@ function scrollToWorks(): void {
   --menu-layer-1-w: clamp(1.75rem, 3.2vw, 2.75rem);
   --menu-layer-2-w: clamp(2.75rem, 5vw, 4.25rem);
   --menu-panel-w: clamp(17rem, 34vw, 24rem);
+  /*
+   * 级联层（真正可见的白色面板）宽度。
+   *
+   * 必须与 CascadePanels.vue 中 .cascade__layer 的 width 保持一致：
+   * Close 按钮要贴到这一层的右缘，而不是 .entry__menu-panel 的右缘。
+   * 两处若不一致，按钮就会越出 layer 的 overflow: hidden 被裁掉
+   * （实测 1440px 下越界 10px，「×」被切掉一截）。
+   */
+  --cascade-layer-w: min(88vw, 21rem);
   position: absolute;
   top: 0;
   right: 0;
@@ -809,7 +841,20 @@ function scrollToWorks(): void {
   min-height: 0;
 }
 
-/* Close 按钮浮在级联面板之上 */
+/*
+ * Close 按钮浮在级联面板之上。
+ *
+ * 定位基准 .entry__menu-panel 的右缘比真正可见的白色面板
+ * （.cascade__layer，有 overflow: hidden）更靠右，且两者的差值随视口
+ * 变化（1440px 时 panel 更宽 48px；500px 时反而窄 16px），
+ * 因此不能用固定的 right 偏移，否则按钮会越出 layer 被裁切——
+ * 实测「×」被切掉右侧一截。
+ *
+ * 这里改为以 panel 右缘为基准做平移，落点对齐 layer 右缘：
+ *   panel 右缘 = 视口 - 色带1 - 色带2
+ *   layer 右缘 = panel 左缘 + layer 宽 = 视口 - 色带1 - 色带2 - panelW + layerW
+ * 故需要左移 (panelW - layerW)，再加上自身的内边距留白。
+ */
 .entry__menu-close {
   position: absolute;
   top: clamp(1.35rem, 3vw, 2.15rem);
@@ -821,6 +866,8 @@ function scrollToWorks(): void {
   border: none;
   background: none;
   cursor: pointer;
+  /* 对齐到 cascade layer 右缘：panelW - layerW 即两级面板的宽度差 */
+  transform: translateX(calc(var(--cascade-layer-w) - var(--menu-panel-w) - 1.1rem));
 }
 
 .entry__menu-close-mask,
@@ -849,24 +896,64 @@ function scrollToWorks(): void {
 .entry__menu-close-mask {
   display: block;
   overflow: hidden;
-  height: 2.125rem;
+  height: 1.75rem;
 }
 
+/*
+ * Close 原本是实心白胶囊 + 投影，但菜单面板底色已是 #fafafa，
+ * 白底几乎看不出来，只剩一圈硬阴影浮在极简列表右上角，显得突兀。
+ * 改为与列表同构的低调文字按钮：无底色、无阴影，仅靠 hover 给反馈。
+ */
 .entry__menu-close-inner {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 1rem;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.09);
+  gap: 0.4rem;
+  padding: 0.15rem 0;
   font-family: var(--font-sans);
   font-size: 0.8125rem;
+  letter-spacing: 0.02em;
+  /*
+   * 静止态用 0.72 而非 0.55：面板右缘外侧是页头控件（Light / Menu），
+   * 叠得过于透明时 "Close" 会与该区域透出的字形糊在一起，
+   * 同时也会被误读成禁用态。0.72 足够克制又不失可点击感。
+   */
+  opacity: 0.72;
+  transition: opacity 0.25s var(--ease-mechanical);
   will-change: transform;
+}
+
+.entry__menu-close:hover .entry__menu-close-inner,
+.entry__menu-close:focus-visible .entry__menu-close-inner {
+  opacity: 1;
+}
+
+.entry__menu-close:focus-visible {
+  outline: 2px solid #1a52e8;
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .entry__menu-close-inner .entry__iridescent--menu {
   display: inline-block;
+}
+
+/*
+ * 「×」不参与流光，固定为实色。
+ *
+ * 渐变在 280% 宽度上流动，某些相位下该字符恰好落在低对比区，
+ * 截图里几乎看不见，会让按钮失去可关闭的视觉暗示（实测踩过）。
+ * 文字 "Close" 保留流光，符号单独实色，兼顾观感与可用性。
+ */
+.entry__menu-close-inner .entry__iridescent--menu:last-child {
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+  color: rgba(10, 10, 11, 0.55);
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.entry__menu-close:hover .entry__menu-close-inner .entry__iridescent--menu:last-child {
+  color: rgba(10, 10, 11, 0.85);
 }
 
 .entry__menu-credits {

@@ -178,7 +178,7 @@ function breadcrumbFor(index: number): string[] {
             :class="`cascade__item--${item.kind}`"
             @click="enter(item)"
           >
-            <span class="cascade__item-label">{{ item.label }}</span>
+            <span class="cascade__item-label iridescent iridescent--menu">{{ item.label }}</span>
             <span v-if="item.meta" class="cascade__item-meta">{{ item.meta }}</span>
             <span v-if="item.kind === 'panel'" class="cascade__item-arrow" aria-hidden="true">›</span>
             <span v-else-if="item.kind === 'external'" class="cascade__item-arrow" aria-hidden="true">↗</span>
@@ -208,7 +208,13 @@ function breadcrumbFor(index: number): string[] {
   top: 0;
   left: 0;
   height: 100%;
-  width: min(88vw, 21rem);
+  /*
+   * 宽度取自 .entry__menu-drawer 上的 --cascade-layer-w，与 Close 按钮的
+   * 定位基准共用同一个值，避免两处各写一份后逐渐漂移
+   * （漂移会让按钮越出本层的 overflow: hidden 被裁掉）。
+   * 回退值保证组件在菜单之外被复用时依然有合理宽度。
+   */
+  width: var(--cascade-layer-w, min(88vw, 21rem));
   display: flex;
   /* 窄条固定渲染在面板右端（与父层裁剪保留的一侧一致） */
   flex-direction: row-reverse;
@@ -399,6 +405,26 @@ function breadcrumbFor(index: number): string[] {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/*
+ * 逐条错开流光相位，形成逐行流动的观感；否则整列同步明暗，显得呆板。
+ *
+ * 用 animation-delay 的负值而不是 background-position-x：
+ * iridescent--menu 正在跑 iridescent-flow 动画，动画会持续覆盖
+ * background-position，静态写死的偏移会被立刻冲掉（实测五个条目的
+ * computed backgroundPositionX 完全相同，偏移完全没生效）。
+ * 负延迟让动画从中途开始，相位错开且不产生额外开销。
+ *
+ * 用 nth-child 而非 JS 注入内联变量：条目由 v-for 渲染，数量随级联
+ * 层级变化，纯 CSS 方案无需同步维护状态。
+ */
+.cascade__item:nth-child(2) .cascade__item-label { animation-delay: -0.7s; }
+.cascade__item:nth-child(3) .cascade__item-label { animation-delay: -1.4s; }
+.cascade__item:nth-child(4) .cascade__item-label { animation-delay: -2.1s; }
+.cascade__item:nth-child(5) .cascade__item-label { animation-delay: -2.8s; }
+.cascade__item:nth-child(6) .cascade__item-label { animation-delay: -3.5s; }
+.cascade__item:nth-child(7) .cascade__item-label { animation-delay: -4.2s; }
+.cascade__item:nth-child(8) .cascade__item-label { animation-delay: -4.9s; }
 
 .cascade__item-meta {
   flex: 0 0 auto;
